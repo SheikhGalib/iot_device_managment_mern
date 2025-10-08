@@ -1,0 +1,9 @@
+{
+  "name": "test-device",
+  "type": "Raspberry Pi",
+  "ip_address": "192.168.1.100",
+  "ssh_port": 22,
+  "ssh_username": "pi",
+  "ssh_password": "raspberry",
+  "mac_address": "b8:27:eb:12:34:56"
+}
