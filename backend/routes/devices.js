@@ -68,39 +68,125 @@ router.get('/', async (req, res, next) => {
 // @access  Private
 router.post('/register', validateDevice, async (req, res, next) => {
   try {
-    const device = await Device.create(req.body);
-
-    // Try to establish initial connection to verify credentials
-    try {
-      await sshManager.connect(device);
-      device.status = 'online';
-      device.last_seen = new Date();
-      await device.save();
-
-      // Get initial system info
-      const systemInfo = await sshManager.getSystemInfo(device._id.toString());
-      device.cpu_usage = parseFloat(systemInfo.cpu) || 0;
-      device.ram_usage = parseFloat(systemInfo.memory) || 0;
-      device.temperature = parseFloat(systemInfo.temperature) || 0;
-      await device.save();
-
-      logger.info(`Device registered and connected: ${device.name} (${device.ip_address})`);
-    } catch (sshError) {
-      logger.warn(`Device registered but SSH connection failed: ${device.name} - ${sshError.message}`);
-    }
-
-    // Log activity
-    await DeviceActivity.create({
-      device_id: device._id,
-      action_type: 'system_check',
-      status: 'success',
-      log_output: 'Device registered successfully',
-      triggered_by: req.user.username
+    // Generate unique device key
+    const deviceKey = `device_${uuidv4().replace(/-/g, '')}`;
+    
+    const device = await Device.create({
+      ...req.body,
+      device_key: deviceKey,
+      status: 'offline',
+      deployment_status: 'idle',
+      api_status: 'not-connected'
     });
 
+    // Return immediately with device info and device key
     res.status(201).json({
       success: true,
-      data: device
+      data: device,
+      message: 'Device registered successfully. Starting SSH connection and edge server deployment...',
+      device_key: deviceKey
+    });
+
+    // Handle SSH connection and deployment asynchronously
+    setImmediate(async () => {
+      try {
+        // Update deployment status
+        device.deployment_status = 'running';
+        await device.save();
+
+        // Try to establish initial connection to verify credentials
+        await sshManager.connect(device);
+        device.status = 'online';
+        device.last_seen = new Date();
+        await device.save();
+        
+        logger.info(`SSH connection established to device ${device.name} (${device.ip_address})`);
+        
+        // Deploy edge server to the device
+        const deploymentResult = await sshManager.deployEdgeServer(device._id.toString(), deviceKey);
+        
+        if (deploymentResult.success) {
+          device.api_status = 'not-connected'; // Waiting for edge server to connect
+          device.deployment_status = 'idle';
+          logger.info(`Edge server deployed successfully to ${device.name}`);
+        } else {
+          device.api_status = 'error';
+          device.deployment_status = 'error';
+          logger.warn(`Edge server deployment failed for ${device.name}: ${deploymentResult.error}`);
+        }
+        
+        await device.save();
+
+        // Get initial system info
+        try {
+          const systemInfo = await sshManager.getSystemInfo(device._id.toString());
+          device.cpu_usage = parseFloat(systemInfo.cpu) || 0;
+          device.ram_usage = parseFloat(systemInfo.memory) || 0;
+          device.temperature = parseFloat(systemInfo.temperature) || 0;
+          await device.save();
+        } catch (sysError) {
+          logger.warn(`Failed to get system info for ${device.name}: ${sysError.message}`);
+        }
+
+        logger.info(`Device registered and connected: ${device.name} (${device.ip_address})`);
+
+        // Log activity
+        await DeviceActivity.create({
+          device_id: device._id,
+          action_type: 'system_check',
+          status: 'success',
+          log_output: 'Device registered and edge server deployed successfully',
+          triggered_by: 'system'
+        });
+
+      } catch (sshError) {
+        logger.warn(`Device registered but SSH connection failed: ${device.name} - ${sshError.message}`);
+        
+        device.status = 'offline';
+        device.deployment_status = 'error';
+        device.api_status = 'error';
+        await device.save();
+
+        // Log error activity
+        await DeviceActivity.create({
+          device_id: device._id,
+          action_type: 'system_check',
+          status: 'failed',
+          log_output: `SSH connection failed: ${sshError.message}`,
+          error_message: sshError.message,
+          triggered_by: 'system'
+        });
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/devices/status/:id
+// @desc    Get device deployment status
+// @access  Private
+router.get('/status/:id', async (req, res, next) => {
+  try {
+    const device = await Device.findById(req.params.id).select('deployment_status api_status status device_key name');
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        deployment_status: device.deployment_status,
+        api_status: device.api_status,
+        status: device.status,
+        device_key: device.device_key,
+        name: device.name
+      }
     });
   } catch (error) {
     next(error);
@@ -148,7 +234,7 @@ router.put('/:id', validateDeviceUpdate, async (req, res, next) => {
       });
     }
 
-    logger.info(`Device updated: ${device.name} by ${req.user.username}`);
+    logger.info(`Device updated: ${device.name} by ${req.user?.username || 'system'}`);
 
     res.json({
       success: true,
@@ -180,7 +266,7 @@ router.delete('/:id', async (req, res, next) => {
     await Device.findByIdAndDelete(req.params.id);
     await DeviceActivity.deleteMany({ device_id: req.params.id });
 
-    logger.info(`Device deleted: ${device.name} by ${req.user.username}`);
+    logger.info(`Device deleted: ${device.name} by ${req.user?.username || 'system'}`);
 
     res.json({
       success: true,
@@ -229,10 +315,10 @@ router.post('/:id/connect', async (req, res, next) => {
       action_type: 'system_check',
       status: 'success',
       log_output: 'SSH connection established',
-      triggered_by: req.user.username
+      triggered_by: req.user?.username || 'system'
     });
 
-    logger.info(`SSH connection established to device ${device.name} by ${req.user.username}`);
+    logger.info(`SSH connection established to device ${device.name} by ${req.user?.username || 'system'}`);
 
     res.json({
       success: true,
@@ -248,7 +334,7 @@ router.post('/:id/connect', async (req, res, next) => {
         status: 'failed',
         log_output: `SSH connection failed: ${error.message}`,
         error_message: error.message,
-        triggered_by: req.user.username
+        triggered_by: req.user?.username || 'system'
       });
     } catch (logError) {
       logger.error('Failed to log connection attempt:', logError);
@@ -285,7 +371,7 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
       action_type: action_type || 'terminal_session',
       command,
       status: 'in_progress',
-      triggered_by: req.user.username,
+      triggered_by: req.user?.username || 'system',
       session_id: uuidv4()
     });
 
@@ -304,7 +390,7 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
       device.last_seen = new Date();
       await device.save();
 
-      logger.info(`Command executed on device ${device.name} by ${req.user.username}: ${command}`);
+      logger.info(`Command executed on device ${device.name} by ${req.user?.username || 'system'}: ${command}`);
 
       res.json({
         success: true,
@@ -452,6 +538,176 @@ router.get('/:id/logs', async (req, res, next) => {
           limit: parseInt(limit)
         }
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PATCH /api/devices/api-status/:deviceId
+// @desc    Update device API connection status
+// @access  Public (called by edge servers)
+router.patch('/api-status/:deviceId', async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const { api_status, server_info } = req.body;
+
+    const device = await Device.findOne({ device_key: deviceId });
+    if (!device) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Device not found' 
+      });
+    }
+
+    device.api_status = api_status;
+    device.last_seen = new Date();
+    
+    if (server_info) {
+      device.metadata = {
+        ...device.metadata,
+        edge_server: server_info
+      };
+    }
+
+    await device.save();
+
+    logger.info(`Device ${device.name} API status updated to: ${api_status}`);
+
+    res.json({ 
+      success: true, 
+      message: 'API status updated',
+      device: {
+        id: device._id,
+        name: device.name,
+        api_status: device.api_status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/heartbeat/:deviceId  
+// @desc    Receive heartbeat from edge server
+// @access  Public (called by edge servers)
+router.post('/heartbeat/:deviceId', async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const { cpu_usage, ram_usage, temperature, timestamp } = req.body;
+
+    const device = await Device.findOne({ device_key: deviceId });
+    if (!device) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Device not found' 
+      });
+    }
+
+    // Update device metrics
+    device.cpu_usage = cpu_usage || 0;
+    device.ram_usage = ram_usage || 0; 
+    device.temperature = temperature || 0;
+    device.last_seen = new Date();
+    device.status = 'online';
+
+    await device.save();
+
+    // Log heartbeat activity
+    await DeviceActivity.create({
+      device_id: device._id,
+      action_type: 'heartbeat',
+      status: 'success',
+      log_output: `CPU: ${cpu_usage}%, RAM: ${ram_usage}%, Temp: ${temperature}°C`,
+      triggered_by: 'edge_server'
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Heartbeat received',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PATCH /api/devices/api-status/:deviceKey
+// @desc    Update device API connection status (called by edge server)
+// @access  Public (edge server endpoint)
+router.patch('/api-status/:deviceKey', async (req, res, next) => {
+  try {
+    const { deviceKey } = req.params;
+    const { api_status, server_info } = req.body;
+
+    const device = await Device.findOne({ device_key: deviceKey });
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    device.api_status = api_status;
+    device.last_seen = new Date();
+    
+    if (api_status === 'connected') {
+      device.status = 'online';
+    }
+    
+    await device.save();
+
+    logger.info(`Device API status updated: ${device.name} -> ${api_status}`);
+
+    res.json({
+      success: true,
+      message: 'API status updated successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/heartbeat/:deviceKey
+// @desc    Receive heartbeat from edge server with system stats
+// @access  Public (edge server endpoint)
+router.post('/heartbeat/:deviceKey', async (req, res, next) => {
+  try {
+    const { deviceKey } = req.params;
+    const { cpu_usage, ram_usage, temperature, timestamp } = req.body;
+
+    const device = await Device.findOne({ device_key: deviceKey });
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Update device metrics
+    device.cpu_usage = cpu_usage || device.cpu_usage;
+    device.ram_usage = ram_usage || device.ram_usage;
+    device.temperature = temperature || device.temperature;
+    device.last_seen = new Date();
+    device.status = 'online';
+    device.api_status = 'connected';
+    
+    await device.save();
+
+    // Optional: Log activity for monitoring
+    await DeviceActivity.create({
+      device_id: device._id,
+      action_type: 'heartbeat',
+      status: 'success',
+      log_output: `Heartbeat received - CPU: ${cpu_usage}%, RAM: ${ram_usage}%, Temp: ${temperature}°C`,
+      triggered_by: 'edge_server'
+    });
+
+    res.json({
+      success: true,
+      message: 'Heartbeat received'
     });
   } catch (error) {
     next(error);

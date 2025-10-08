@@ -58,14 +58,14 @@ const DeviceDetail = () => {
         setIsLoading(true);
         const response = await deviceApi.getDevice(id);
         
-        if (response.data.success) {
-          setDevice(response.data);
+        if ((response as any).success) {
+          setDevice((response as any).data);
           setRealtimeMetrics({
-            cpu: response.data.cpu_usage,
-            ram: response.data.ram_usage,
-            temperature: response.data.temperature
+            cpu: (response as any).data.cpu_usage,
+            ram: (response as any).data.ram_usage,
+            temperature: (response as any).data.temperature
           });
-          setIsConnected(response.data.status === 'online');
+          setIsConnected((response as any).data.status === 'online');
           
           // Join device room for real-time updates
           if (socketService.isConnected()) {
@@ -129,7 +129,7 @@ const DeviceDetail = () => {
       setIsConnecting(true);
       const response = await deviceApi.connectToDevice(device._id);
       
-      if (response.data.success) {
+      if ((response as any).success) {
         setIsConnected(true);
         toast({
           title: "Success",

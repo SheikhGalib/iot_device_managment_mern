@@ -17,7 +17,8 @@ const deviceActivitySchema = new mongoose.Schema({
       'file_operation', 
       'system_check',
       'restart',
-      'shutdown'
+      'shutdown',
+      'heartbeat'
     ]
   },
   status: {

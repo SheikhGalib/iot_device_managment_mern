@@ -130,6 +130,88 @@ class SSHManager {
     }
   }
 
+  async deployEdgeServer(deviceId, deviceKey) {
+    try {
+      const connection = this.getConnection(deviceId);
+      if (!connection) {
+        throw new Error('No SSH connection available for device');
+      }
+
+      logger.info(`Starting edge server deployment for device ${deviceId}`);
+
+      // Step 1: Check if git is installed
+      try {
+        await connection.execCommand('git --version');
+      } catch (error) {
+        logger.warn('Git not found, installing...');
+        await connection.execCommand('sudo apt update && sudo apt install -y git python3 python3-pip python3-venv');
+      }
+
+      // Step 2: Clone or update the edge server repository
+      const edgeServerPath = '~/edgeServer';
+      
+      // Check if directory exists
+      const dirExists = await connection.execCommand(`test -d ${edgeServerPath} && echo "exists" || echo "not exists"`);
+      
+      if (dirExists.stdout.trim() === 'exists') {
+        // Update existing repository
+        await connection.execCommand(`cd ${edgeServerPath} && git pull origin main`);
+        logger.info('Updated existing edge server repository');
+      } else {
+        // Clone new repository
+        await connection.execCommand('git clone https://github.com/SheikhGalib/edgeServer.git ~/edgeServer');
+        logger.info('Cloned edge server repository');
+      }
+
+      // Step 3: Set up Python virtual environment
+      await connection.execCommand(`cd ${edgeServerPath} && python3 -m venv venv`);
+      
+      // Step 4: Install requirements
+      await connection.execCommand(`cd ${edgeServerPath} && source venv/bin/activate && pip install -r requirements.txt`);
+
+      // Step 5: Create systemd service for auto-start
+      const serviceContent = `[Unit]
+Description=IoT Edge Server
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=${edgeServerPath}
+ExecStart=${edgeServerPath}/venv/bin/python edge_server.py --device-id ${deviceKey} --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target`;
+
+      // Write service file
+      await connection.execCommand(`echo '${serviceContent}' | sudo tee /etc/systemd/system/iot-edge-server.service`);
+      
+      // Enable and start the service
+      await connection.execCommand('sudo systemctl daemon-reload');
+      await connection.execCommand('sudo systemctl enable iot-edge-server.service');
+      await connection.execCommand('sudo systemctl start iot-edge-server.service');
+
+      logger.info(`Edge server deployed and started with device key: ${deviceKey}`);
+
+      return {
+        success: true,
+        message: 'Edge server deployed successfully',
+        deviceKey: deviceKey,
+        installPath: edgeServerPath,
+        serviceStatus: 'started'
+      };
+
+    } catch (error) {
+      logger.error(`Failed to deploy edge server for device ${deviceId}:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
   disconnectAll() {
     for (const [deviceId, connection] of this.connections.entries()) {
       try {

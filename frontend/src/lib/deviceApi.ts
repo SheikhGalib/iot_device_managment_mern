@@ -8,7 +8,9 @@ export interface Device {
   ssh_port: number;
   ssh_username: string;
   mac_address: string;
+  device_key?: string;
   status: 'online' | 'offline';
+  api_status?: 'not-connected' | 'connected' | 'error';
   last_seen: string;
   cpu_usage: number;
   ram_usage: number;
@@ -73,6 +75,12 @@ export const deviceApi = {
   // Get device by ID
   getDevice: async (id: string) => {
     const response = await api.get(`/devices/${id}`);
+    return response;
+  },
+
+  // Get device deployment status
+  getDeviceDeploymentStatus: async (id: string) => {
+    const response = await api.get(`/devices/status/${id}`);
     return response;
   },
 

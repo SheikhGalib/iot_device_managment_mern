@@ -111,9 +111,9 @@ const EdgeDevices = () => {
 
       const response = await deviceApi.getDevices(params);
       
-      if (response.data.success) {
-        setDevices(response.data.devices);
-        setPagination(response.data.pagination);
+      if ((response as any).success) {
+        setDevices((response as any).data.devices);
+        setPagination((response as any).data.pagination);
       } else {
         toast({
           title: "Error",

@@ -14,11 +14,27 @@ const DeviceCard = ({ device }: DeviceCardProps) => {
   const navigate = useNavigate();
 
   return (
-    <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate(`/dashboard/device/${device._id}`)}>
-      <div className="flex items-start justify-between mb-4">
+    <Card className="relative p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate(`/dashboard/device/${device._id}`)}>
+      {/* API Status Indicator */}
+      <div className="absolute top-3 left-3">
+        <div className={`w-3 h-3 rounded-full ${
+          device.api_status === 'connected' 
+            ? 'bg-green-500' 
+            : device.api_status === 'error'
+            ? 'bg-red-500'
+            : 'bg-orange-500'
+        }`} title={`API Status: ${device.api_status || 'not-connected'}`} />
+      </div>
+
+      <div className="flex items-start justify-between mb-4 ml-6">
         <div>
           <h3 className="text-lg font-semibold mb-1">{device.name}</h3>
           <p className="text-sm text-muted-foreground">{device.type}</p>
+          {device.api_status && (
+            <p className="text-xs text-muted-foreground">
+              API: {device.api_status.replace('-', ' ')}
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           <Badge variant={device.status === "online" ? "default" : "destructive"}>

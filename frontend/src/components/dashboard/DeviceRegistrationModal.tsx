@@ -121,16 +121,29 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
     try {
       const response = await deviceApi.registerDevice(formData);
       
-      if (response.data.success) {
+      console.log('Registration response:', response);
+      console.log('Response success:', (response as any).success);
+      console.log('Response data:', (response as any).data);
+      console.log('Response device_key:', (response as any).device_key);
+      
+      if ((response as any).success) {
+        // Device registered successfully, now monitor deployment progress
+        const deviceId = (response as any).data._id;
+        const deviceKey = (response as any).device_key;
+
+        console.log('Monitoring deployment for device ID:', deviceId);
+        console.log('Device Key:', deviceKey);
+        
+        // Show success with device key
         setStep('success');
         setConnectionResult({
           success: true,
-          message: 'Device registered and connected successfully!'
+          message: `Device registered successfully! Device Key: ${deviceKey}`
         });
 
         toast({
-          title: "Success",
-          description: "Device registered successfully",
+          title: "Device Registered",
+          description: `Device registered with key: ${deviceKey}`,
         });
 
         // Call callback to refresh device list
@@ -138,11 +151,15 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
           onDeviceRegistered();
         }
 
-        // Auto close after 2 seconds
+        console.log('Device registration and deployment monitoring completed.');
+
+        // Auto close after 3 seconds
         setTimeout(() => {
           onOpenChange(false);
           resetForm();
-        }, 2000);
+        }, 3000);
+        
+        console.log('Modal will close automatically in 3 seconds.');
       }
     } catch (error: any) {
       console.error('Registration error:', error);

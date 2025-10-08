@@ -87,10 +87,10 @@ const FileManagerComponent: React.FC<FileManagerProps> = ({ deviceId, deviceName
       } else {
         // Fallback to REST API
         const response = await deviceApi.browseFiles(deviceId, path);
-        if (response.data.success) {
-          setFiles(response.data.files);
+        if ((response as any).success) {
+          setFiles((response as any).data.files);
         } else {
-          setError(response.data.error || 'Failed to load files');
+          setError((response as any).error || 'Failed to load files');
         }
         setIsLoading(false);
       }

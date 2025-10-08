@@ -63,3 +63,5 @@ edgeServer/.env
 edgeServer/venv/
 edgeServer/__pycache__/
 edgeServer/*.pyc
+
+.txt

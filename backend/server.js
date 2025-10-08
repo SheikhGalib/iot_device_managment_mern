@@ -70,8 +70,8 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, 'localhost', () => {
-  logger.info(`Server running on http://localhost:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+server.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server running on http://0.0.0.0:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
   
   // Start device monitoring after server starts (disabled for now)
   // setTimeout(() => {

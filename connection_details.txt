@@ -1,0 +1,9 @@
+Device name: LAPTOP-QJFT5N86
+IP Address: 172.30.30.233
+Device type: linux server
+SSH Username: sheikh
+SSH Password: 5810
+MAC Address: 00:15:5d:0a:66:0e
+
+I can connect to the WSL using
+sheikh@172.30.30.233

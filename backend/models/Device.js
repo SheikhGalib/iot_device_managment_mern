@@ -45,10 +45,20 @@ const deviceSchema = new mongoose.Schema({
       message: 'Invalid MAC address format'
     }
   },
+  device_key: {
+    type: String,
+    unique: true,
+    required: true
+  },
   status: {
     type: String,
     enum: ['online', 'offline'],
     default: 'offline'
+  },
+  api_status: {
+    type: String,
+    enum: ['not-connected', 'connected', 'error'],
+    default: 'not-connected'
   },
   last_seen: {
     type: Date,
