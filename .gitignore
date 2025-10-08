@@ -56,3 +56,10 @@ backend/__pycache__
 backend/*.pyc
 backend/*.pyo
 backend/*.pyd
+
+# edgeServer
+## Environment variables and sensitive files
+edgeServer/.env 
+edgeServer/venv/
+edgeServer/__pycache__/
+edgeServer/*.pyc
