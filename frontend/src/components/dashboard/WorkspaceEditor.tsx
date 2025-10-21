@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
-import { debounce } from 'lodash.debounce';
+import debounce from 'lodash.debounce';
 import { 
   ArrowLeft, 
   Plus, 
@@ -64,7 +64,7 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
   const loadWidgetTypes = async () => {
     try {
       const response = await workspaceService.getWidgetTypes();
-      setWidgetTypes(response.data);
+      setWidgetTypes(response);
     } catch (error) {
       toast({
         title: 'Error',
@@ -171,7 +171,7 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
       };
 
       const response = await workspaceService.addWidget(workspace._id, widgetData);
-      setWidgets(prev => [...prev, response.data]);
+      setWidgets(prev => [...prev, response]);
       setAddWidgetDialogOpen(false);
 
       toast({
@@ -194,7 +194,7 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
   const handleUpdateWidget = async (widgetId: string, updates: any) => {
     try {
       const response = await workspaceService.updateWidget(widgetId, updates);
-      setWidgets(prev => prev.map(w => w._id === widgetId ? response.data : w));
+      setWidgets(prev => prev.map(w => w._id === widgetId ? response : w));
       setEditingWidget(null);
 
       toast({
@@ -213,7 +213,7 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
   const handleDuplicateWidget = async (widget: Widget) => {
     try {
       const response = await workspaceService.duplicateWidget(widget._id);
-      setWidgets(prev => [...prev, response.data]);
+      setWidgets(prev => [...prev, response]);
 
       toast({
         title: 'Success',
@@ -253,7 +253,7 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
   const handleExportWorkspace = async () => {
     try {
       const response = await workspaceService.exportWorkspace(workspace._id);
-      const dataStr = JSON.stringify(response.data, null, 2);
+      const dataStr = JSON.stringify(response, null, 2);
       const dataBlob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(dataBlob);
       

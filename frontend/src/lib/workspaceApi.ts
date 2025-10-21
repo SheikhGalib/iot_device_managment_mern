@@ -115,7 +115,7 @@ class WorkspaceService {
   // Workspace operations
   async getWorkspaces(params?: { page?: number; limit?: number; search?: string }) {
     const response = await apiClient.get('/workspaces', { params });
-    return response;
+    return response.data;
   }
 
   async createWorkspace(data: WorkspaceCreate) {
@@ -125,6 +125,8 @@ class WorkspaceService {
 
   async getWorkspace(id: string) {
     const response = await apiClient.get(`/workspaces/${id}`);
+    console.log('WorkspaceService - getWorkspace full response:', response);
+    console.log('WorkspaceService - getWorkspace response.data:', response.data);
     return response.data;
   }
 
@@ -146,6 +148,7 @@ class WorkspaceService {
   // Widget operations
   async addWidget(workspaceId: string, data: WidgetCreate) {
     const response = await apiClient.post(`/workspaces/${workspaceId}/widgets`, data);
+    console.log('WorkspaceService - addWidget response:', response.data);
     return response.data;
   }
 
@@ -161,6 +164,7 @@ class WorkspaceService {
 
   async getWidget(widgetId: string) {
     const response = await apiClient.get(`/widgets/${widgetId}`);
+    console.log('WorkspaceService - getWidget response:', response.data);
     return response.data;
   }
 

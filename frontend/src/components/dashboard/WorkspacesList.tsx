@@ -37,7 +37,7 @@ export function WorkspacesList({ onSelectWorkspace }: WorkspacesListProps) {
       setLoading(true);
       const params = searchQuery ? { search: searchQuery } : {};
       const response = await workspaceService.getWorkspaces(params);
-      setWorkspaces(response.data?.workspaces || []);
+      setWorkspaces(response.workspaces || []);
     } catch (error) {
       console.error('Failed to load workspaces:', error);
       const errorMessage = error.message || 'Unknown error';
@@ -64,7 +64,7 @@ export function WorkspacesList({ onSelectWorkspace }: WorkspacesListProps) {
       }
 
       const response = await workspaceService.createWorkspace(formData);
-      setWorkspaces(prev => [response.data, ...prev]);
+      setWorkspaces(prev => [response, ...prev]);
       setCreateDialogOpen(false);
       setFormData({ name: '', description: '', isDefault: false });
       
@@ -74,7 +74,7 @@ export function WorkspacesList({ onSelectWorkspace }: WorkspacesListProps) {
       });
 
       // Auto-select the new workspace
-      onSelectWorkspace(response.data);
+      onSelectWorkspace(response);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -90,7 +90,7 @@ export function WorkspacesList({ onSelectWorkspace }: WorkspacesListProps) {
     try {
       const response = await workspaceService.updateWorkspace(editingWorkspace._id, formData);
       setWorkspaces(prev => 
-        prev.map(w => w._id === editingWorkspace._id ? response.data : w)
+        prev.map(w => w._id === editingWorkspace._id ? response : w)
       );
       setEditingWorkspace(null);
       setFormData({ name: '', description: '', isDefault: false });

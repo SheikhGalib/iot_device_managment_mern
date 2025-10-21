@@ -111,6 +111,7 @@ router.post('/', async (req, res, next) => {
 // @access  Private
 router.get('/:id', async (req, res, next) => {
   try {
+    logger.info(`Getting workspace ${req.params.id} for user ${req.user._id}`);
     const workspace = await Workspace.findOne({
       _id: req.params.id,
       user: req.user._id
@@ -124,11 +125,14 @@ router.get('/:id', async (req, res, next) => {
     }).lean();
 
     if (!workspace) {
+      logger.info(`Workspace ${req.params.id} not found for user ${req.user._id}`);
       return res.status(404).json({
         success: false,
         error: 'Workspace not found'
       });
     }
+
+    logger.info(`Successfully found workspace ${workspace._id} with ${workspace.widgets?.length || 0} widgets`);
 
     // Ensure each widget has proper layout.i set to widget._id string
     workspace.widgets = workspace.widgets.map(widget => ({

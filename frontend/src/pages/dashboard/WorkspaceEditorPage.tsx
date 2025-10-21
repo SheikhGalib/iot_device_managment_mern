@@ -24,6 +24,7 @@ const WorkspaceEditorPage = () => {
         setLoading(true);
         setError(null);
         const data = await workspaceService.getWorkspace(workspaceId);
+        console.log('WorkspaceEditorPage - getWorkspace result:', data);
         setWorkspace(data);
       } catch (err: any) {
         console.error('Failed to load workspace:', err);
@@ -140,11 +141,21 @@ const WorkspaceEditorPage = () => {
 
   return (
     <div className="h-full">
-      <WorkspaceEditor 
-        workspace={workspace}
-        onBack={handleBack}
-        onWorkspaceUpdate={handleWorkspaceUpdate}
-      />
+
+      
+      {workspace ? (
+        <WorkspaceEditor 
+          workspace={workspace}
+          onBack={handleBack}
+          onWorkspaceUpdate={handleWorkspaceUpdate}
+        />
+      ) : (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold">Loading workspace...</h2>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
