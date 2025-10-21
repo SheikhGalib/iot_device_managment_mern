@@ -13,7 +13,7 @@ const char *serverBase = "http://192.168.137.1:3001/api/devices";
 const char *deviceKey = "device_eaffce0945934a84a3a506d17e23656b"; // Use device_key
 
 unsigned long previousMillis = 0;
-const long interval = 5000; // Send data every 5 seconds
+const long interval = 10000; // Send data every 10 seconds (reduced frequency)
 
 unsigned long ledPreviousMillis = 0;
 const long ledInterval = 2000; // Toggle LED every 2 seconds
@@ -39,7 +39,7 @@ void setup()
 void loop()
 {
     unsigned long currentMillis = millis();
-        
+
     // Toggle LED every 2 seconds
     if (currentMillis - ledPreviousMillis >= ledInterval)
     {
@@ -49,27 +49,29 @@ void loop()
         Serial.printf("LED %s\n", ledState ? "ON" : "OFF");
     }
 
-    
     if (currentMillis - previousMillis >= interval)
     {
         previousMillis = currentMillis;
 
+        // Send heartbeat and LED data with a small delay between them
         sendHeartbeat();
+        delay(1000); // 1 second delay between requests
         sendLedData();
     }
 }
 
 void sendHeartbeat()
 {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String url = String(serverBase) + "/" + deviceKey + "/heartbeat";
-    http.begin(url);
-    http.addHeader("Content-Type", "application/json");
-    
-    http.POST("{}");
-    http.end();
-  }
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        HTTPClient http;
+        String url = String(serverBase) + "/" + deviceKey + "/heartbeat";
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+
+        http.POST("{}");
+        http.end();
+    }
 }
 
 void sendLedData()
@@ -77,7 +79,7 @@ void sendLedData()
     if (WiFi.status() == WL_CONNECTED)
     {
         HTTPClient http;
-        String url = String(serverBase) + "/" + deviceKey + "/led-control"; 
+        String url = String(serverBase) + "/" + deviceKey + "/led-control";
         http.begin(url);
         http.addHeader("Content-Type", "application/json");
 

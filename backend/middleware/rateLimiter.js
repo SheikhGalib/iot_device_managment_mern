@@ -30,8 +30,15 @@ const sshRateLimit = createRateLimit(
   'Too many SSH commands, try again later'
 );
 
+const iotRateLimit = createRateLimit(
+  60 * 1000, // 1 minute
+  50, // limit each IP to 50 requests per minute (allows heartbeat + data every 5 seconds)
+  'Too many IoT requests, try again later'
+);
+
 module.exports = {
   authRateLimit,
   generalRateLimit,
-  sshRateLimit
+  sshRateLimit,
+  iotRateLimit
 };

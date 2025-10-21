@@ -134,11 +134,13 @@ const EdgeDevices = () => {
   };
 
   const filteredDevices = devices.filter((device) => {
+    // Only show Computer/Edge devices, not IoT devices
+    const isEdgeDevice = device.category === 'Computer';
     const matchesSearch = device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          device.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         device.ip_address.toLowerCase().includes(searchQuery.toLowerCase());
+                         (device.ip_address && device.ip_address.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesStatus = filterStatus === "all" || device.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    return isEdgeDevice && matchesSearch && matchesStatus;
   });
 
   return (

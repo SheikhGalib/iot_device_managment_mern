@@ -3,7 +3,7 @@ const Device = require('../models/Device');
 const DeviceActivity = require('../models/DeviceActivity');
 const { authenticate } = require('../middleware/auth');
 const { validateDevice, validateDeviceUpdate, validateCommand } = require('../middleware/validation');
-const { sshRateLimit } = require('../middleware/rateLimiter');
+const { sshRateLimit, iotRateLimit } = require('../middleware/rateLimiter');
 const sshManager = require('../utils/sshManager');
 const httpApiManager = require('../utils/httpApiManager');
 const logger = require('../utils/logger');
@@ -95,18 +95,19 @@ router.post('/register', validateDevice, async (req, res, next) => {
       device_key: deviceKey
     });
 
-    // Handle SSH connection and deployment asynchronously
-    setImmediate(async () => {
-      try {
-        // Update deployment status
-        device.deployment_status = 'running';
-        await device.save();
+    // Handle SSH connection and deployment asynchronously (only for Computer/Edge devices)
+    if (device.category === 'Computer') {
+      setImmediate(async () => {
+        try {
+          // Update deployment status
+          device.deployment_status = 'running';
+          await device.save();
 
-        // Try to establish initial connection to verify credentials
-        await sshManager.connect(device);
-        device.status = 'online';
-        device.last_seen = new Date();
-        await device.save();
+          // Try to establish initial connection to verify credentials
+          await sshManager.connect(device);
+          device.status = 'online';
+          device.last_seen = new Date();
+          await device.save();
         
         logger.info(`SSH connection established to device ${device.name} (${device.ip_address})`);
         
@@ -165,7 +166,17 @@ router.post('/register', validateDevice, async (req, res, next) => {
           triggered_by: 'system'
         });
       }
-    });
+      });
+    } else {
+      // For IoT devices, just set them as online and ready
+      device.status = 'online';
+      device.deployment_status = 'idle';
+      device.api_status = 'not-connected';
+      device.last_seen = new Date();
+      await device.save();
+      
+      logger.info(`IoT device registered: ${device.name} - Waiting for device to connect`);
+    }
 
   } catch (error) {
     next(error);
@@ -835,7 +846,7 @@ router.patch('/api-status/:deviceId', async (req, res, next) => {
 // @route   POST /api/devices/heartbeat/:deviceId  
 // @desc    Receive heartbeat from edge server
 // @access  Public (called by edge servers)
-router.post('/heartbeat/:deviceId', async (req, res, next) => {
+router.post('/heartbeat/:deviceId', iotRateLimit, async (req, res, next) => {
   try {
     const { deviceId } = req.params;
     const { cpu_usage, ram_usage, temperature, timestamp } = req.body;
@@ -1053,7 +1064,7 @@ router.post('/:id/humidity-control', async (req, res, next) => {
 // @route   POST /api/devices/:id/led-control
 // @desc    Receive LED state data from IoT device
 // @access  Public (no auth - called by ESP32)
-router.post('/:deviceKey/led-control', async (req, res, next) => {
+router.post('/:deviceKey/led-control', iotRateLimit, async (req, res, next) => {
   try {
     const { led_state, brightness } = req.body;
     
