@@ -149,11 +149,11 @@ const getStatusIcon = (widget: Widget, value: any) => {
   return null;
 };
 
-const renderWidgetContent = (widget: Widget, mockValue: any) => {
+const renderWidgetContent = (widget: Widget, currentValue: any) => {
   const IconComponent = getWidgetIcon(widget.type);
-  const StatusIcon = getStatusIcon(widget, mockValue);
-  const statusColor = getStatusColor(widget, mockValue);
-  const formattedValue = formatValue(mockValue, widget);
+  const StatusIcon = getStatusIcon(widget, currentValue);
+  const statusColor = getStatusColor(widget, currentValue);
+  const formattedValue = formatValue(currentValue, widget);
   
   switch (widget.type) {
     case 'temperature':
@@ -169,7 +169,7 @@ const renderWidgetContent = (widget: Widget, mockValue: any) => {
             {StatusIcon && <StatusIcon className={`h-4 w-4 ${statusColor}`} />}
           </div>
           <div className={`text-2xl font-bold ${statusColor}`}>
-            {formattedValue}
+            {currentValue !== null ? formattedValue : 'No Data'}
           </div>
           {widget.settings.sensorKey && (
             <div className="text-xs text-muted-foreground">
@@ -183,11 +183,11 @@ const renderWidgetContent = (widget: Widget, mockValue: any) => {
       return (
         <div className="flex flex-col items-center justify-center h-full space-y-2">
           <Lightbulb 
-            className={`h-12 w-12 ${mockValue ? 'text-yellow-500' : 'text-gray-400'}`}
-            fill={mockValue ? 'currentColor' : 'none'}
+            className={`h-12 w-12 ${currentValue ? 'text-yellow-500' : 'text-gray-400'}`}
+            fill={currentValue ? 'currentColor' : 'none'}
           />
           <div className={`text-lg font-bold ${statusColor}`}>
-            {formatValue(mockValue, widget)}
+            {currentValue !== null ? formatValue(currentValue, widget) : 'No Data'}
           </div>
         </div>
       );
@@ -200,11 +200,11 @@ const renderWidgetContent = (widget: Widget, mockValue: any) => {
             <span className="font-medium">Location</span>
           </div>
           <div className="space-y-1 text-sm">
-            <div>Lat: {mockValue?.lat || '--'}</div>
-            <div>Lng: {mockValue?.lng || '--'}</div>
-            {mockValue?.address && (
+            <div>Lat: {currentValue?.lat || 'No Data'}</div>
+            <div>Lng: {currentValue?.lng || 'No Data'}</div>
+            {currentValue?.address && (
               <div className="text-xs text-muted-foreground truncate">
-                {mockValue.address}
+                {currentValue.address}
               </div>
             )}
           </div>
@@ -260,32 +260,28 @@ const renderWidgetContent = (widget: Widget, mockValue: any) => {
   }
 };
 
-// Mock data generator for demonstration
-const generateMockValue = (widget: Widget) => {
+// Static placeholder data for widgets without linked devices
+const getPlaceholderValue = (widget: Widget) => {
   switch (widget.type) {
     case 'temperature':
-      return 23.5 + (Math.random() - 0.5) * 10;
+      return null; // Show "No Data" instead of fake temperature
     case 'humidity':
-      return 45 + Math.random() * 30;
+      return null; // Show "No Data" instead of fake humidity  
     case 'led':
-      return Math.random() > 0.5;
+      return false; // Default to OFF state
     case 'gps':
-      return {
-        lat: (40.7128 + (Math.random() - 0.5) * 0.1).toFixed(6),
-        lng: (-74.0060 + (Math.random() - 0.5) * 0.1).toFixed(6),
-        address: "New York, NY"
-      };
+      return null; // Show "No Location" instead of fake coordinates
     case 'gauge':
-      return Math.random() * 100;
+      return 0; // Default to 0
     case 'text':
-      return "Sample text data";
+      return "No Data";
     default:
-      return Math.random() * 100;
+      return null;
   }
 };
 
 export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice, isEditing = false }: WidgetCardProps) {
-  const [mockValue] = useState(() => generateMockValue(widget));
+  const placeholderValue = getPlaceholderValue(widget);
   
   // Use real device data if widget is linked to a device
   const { 
@@ -302,20 +298,20 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
     enabled: !!widget.deviceId && widget.isActive
   });
 
-  // Determine which value to use - real device data or mock data
+  // Determine which value to use - real device data or placeholder data
   const getCurrentValue = () => {
     if (!widget.deviceId || !deviceData) {
-      return mockValue; // Use mock data if no device linked or no real data
+      return placeholderValue; // Use placeholder data if no device linked or no real data
     }
 
     // Extract the appropriate value based on widget type and device data
     switch (widget.type) {
       case 'temperature':
-        return deviceData.temperature ?? mockValue;
+        return deviceData.temperature ?? placeholderValue;
       case 'humidity':
-        return deviceData.humidity ?? mockValue;
+        return deviceData.humidity ?? placeholderValue;
       case 'led':
-        return deviceData.led_state ?? mockValue;
+        return deviceData.led_state ?? placeholderValue;
       case 'gps':
         if (deviceData.latitude !== undefined && deviceData.longitude !== undefined) {
           return {
@@ -324,9 +320,9 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
             address: "Real GPS Location"
           };
         }
-        return mockValue;
+        return placeholderValue;
       default:
-        return mockValue;
+        return placeholderValue;
     }
   };
 

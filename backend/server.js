@@ -75,11 +75,11 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server running on http://0.0.0.0:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
   
-  // Start device monitoring after server starts (disabled for now)
-  // setTimeout(() => {
-  //   startDeviceMonitoring();
-  //   logger.info('Device monitoring started');
-  // }, 5000);
+  // Start device monitoring after server starts
+  setTimeout(() => {
+    startDeviceMonitoring();
+    logger.info('Device monitoring started - checking heartbeats every 30 seconds');
+  }, 5000);
 });
 
 // Graceful shutdown

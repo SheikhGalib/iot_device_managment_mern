@@ -275,30 +275,56 @@ const startDeviceMonitoring = () => {
   setInterval(async () => {
     try {
       const onlineDevices = await Device.find({ status: 'online' });
+      const now = new Date();
       
       for (const device of onlineDevices) {
         try {
-          const connection = sshManager.getConnection(device._id.toString());
-          if (connection) {
-            const systemInfo = await sshManager.getSystemInfo(device._id.toString());
-            
-            // Update device metrics
-            const updatedDevice = await Device.findByIdAndUpdate(device._id, {
-              cpu_usage: parseFloat(systemInfo.cpu) || 0,
-              ram_usage: parseFloat(systemInfo.memory) || 0,
-              temperature: parseFloat(systemInfo.temperature) || 0,
-              last_seen: new Date()
-            }, { new: true });
+          if (device.category === 'Computer') {
+            // SSH-based monitoring for edge servers
+            const connection = sshManager.getConnection(device._id.toString());
+            if (connection) {
+              const systemInfo = await sshManager.getSystemInfo(device._id.toString());
+              
+              // Update device metrics
+              const updatedDevice = await Device.findByIdAndUpdate(device._id, {
+                cpu_usage: parseFloat(systemInfo.cpu) || 0,
+                ram_usage: parseFloat(systemInfo.memory) || 0,
+                temperature: parseFloat(systemInfo.temperature) || 0,
+                last_seen: new Date()
+              }, { new: true });
 
-            // Broadcast to connected clients
-            if (io) {
-              io.to(`device-${device._id}`).emit('device-metrics', {
-                deviceId: device._id,
-                cpu: updatedDevice.cpu_usage,
-                ram: updatedDevice.ram_usage,
-                temperature: updatedDevice.temperature,
-                timestamp: new Date()
+              // Broadcast to connected clients
+              if (io) {
+                io.to(`device-${device._id}`).emit('device-metrics', {
+                  deviceId: device._id,
+                  cpu: updatedDevice.cpu_usage,
+                  ram: updatedDevice.ram_usage,
+                  temperature: updatedDevice.temperature,
+                  timestamp: new Date()
+                });
+              }
+            }
+          } else if (device.category === 'IoT') {
+            // Heartbeat-based monitoring for IoT devices
+            const lastSeen = new Date(device.last_seen);
+            const timeSinceLastHeartbeat = now - lastSeen;
+            const heartbeatTimeout = 60000; // 60 seconds timeout
+            
+            if (timeSinceLastHeartbeat > heartbeatTimeout) {
+              // Mark IoT device as offline if no heartbeat for more than 60 seconds
+              await Device.findByIdAndUpdate(device._id, { 
+                status: 'offline',
+                api_status: 'not-connected'
               });
+              
+              logger.warn(`IoT Device ${device.name} went offline - no heartbeat for ${Math.round(timeSinceLastHeartbeat/1000)}s`);
+              
+              if (io) {
+                io.to(`device-${device._id}`).emit('device-status', {
+                  deviceId: device._id,
+                  status: 'offline'
+                });
+              }
             }
           }
         } catch (error) {
