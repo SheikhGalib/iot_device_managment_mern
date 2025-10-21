@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Server } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiClient } from "@/lib/apiClient";
 import { useToast } from "@/hooks/use-toast";
 
 const SignUp = () => {
@@ -18,20 +18,9 @@ const SignUp = () => {
 
   useEffect(() => {
     // Check if user is already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    if (apiClient.isAuthenticated()) {
+      navigate("/dashboard", { replace: true });
+    }
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,27 +28,19 @@ const SignUp = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            full_name: name,
-          },
-        },
-      });
+      const response = await apiClient.register(name, email, password);
 
-      if (error) {
+      if (response.success) {
         toast({
-          title: "Error signing up",
-          description: error.message,
-          variant: "destructive",
+          title: "Success!",
+          description: "Account created successfully!",
         });
+        navigate("/dashboard", { replace: true });
       } else {
         toast({
-          title: "Success",
-          description: "Account created successfully!",
+          title: "Error signing up",
+          description: response.error || "Registration failed",
+          variant: "destructive",
         });
       }
     } catch (error) {

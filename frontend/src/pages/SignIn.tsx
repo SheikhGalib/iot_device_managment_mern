@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Server } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiClient } from "@/lib/apiClient";
 import { useToast } from "@/hooks/use-toast";
 
 const SignIn = () => {
@@ -17,20 +17,9 @@ const SignIn = () => {
 
   useEffect(() => {
     // Check if user is already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    if (apiClient.isAuthenticated()) {
+      navigate("/dashboard", { replace: true });
+    }
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,21 +27,19 @@ const SignIn = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const response = await apiClient.login(email, password);
 
-      if (error) {
+      if (response.success) {
         toast({
-          title: "Error signing in",
-          description: error.message,
-          variant: "destructive",
+          title: "Success!",
+          description: "Signed in successfully",
         });
+        navigate("/dashboard", { replace: true });
       } else {
-        toast({
-          title: "Success",
-          description: "Signed in successfully!",
+        toast({  
+          title: "Error signing in",
+          description: response.error || "Login failed",
+          variant: "destructive",
         });
       }
     } catch (error) {

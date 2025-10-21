@@ -8,7 +8,7 @@ export interface Device {
   ssh_port: number;
   ssh_username: string;
   mac_address: string;
-  device_key?: string;
+  device_key: string;
   status: 'online' | 'offline';
   api_status?: 'not-connected' | 'connected' | 'error';
   last_seen: string;

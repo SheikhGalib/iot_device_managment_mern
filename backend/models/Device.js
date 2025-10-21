@@ -11,6 +11,12 @@ const deviceSchema = new mongoose.Schema({
     required: true,
     enum: ['Raspberry Pi', 'Orange Pi', 'Windows PC', 'Linux Server', 'Other']
   },
+  // User who created this device
+  created_by: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   ip_address: {
     type: String,
     required: true,
@@ -34,6 +40,12 @@ const deviceSchema = new mongoose.Schema({
   ssh_password: {
     type: String,
     required: true // Note: Replace with SSH keys in production
+  },
+  http_port: {
+    type: Number,
+    default: 8081,
+    min: 1,
+    max: 65535
   },
   mac_address: {
     type: String,

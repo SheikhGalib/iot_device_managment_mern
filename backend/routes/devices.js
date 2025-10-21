@@ -5,13 +5,20 @@ const { authenticate } = require('../middleware/auth');
 const { validateDevice, validateDeviceUpdate, validateCommand } = require('../middleware/validation');
 const { sshRateLimit } = require('../middleware/rateLimiter');
 const sshManager = require('../utils/sshManager');
+const httpApiManager = require('../utils/httpApiManager');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
 
-// Apply authentication to all device routes (temporarily disabled for testing)
-// router.use(authenticate);
+// Apply authentication to all device routes except heartbeat endpoints
+router.use((req, res, next) => {
+  // Skip authentication for heartbeat and status endpoints called by edge servers
+  if (req.path.includes('/heartbeat/') || req.path.includes('/api-status/')) {
+    return next();
+  }
+  authenticate(req, res, next);
+});
 
 // @route   GET /api/devices
 // @desc    Get all devices with optional filtering
@@ -20,8 +27,8 @@ router.get('/', async (req, res, next) => {
   try {
     const { status, type, search, page = 1, limit = 10 } = req.query;
     
-    // Build query
-    const query = {};
+    // Build query - filter by user
+    const query = { created_by: req.user._id };
     if (status) query.status = status;
     if (type) query.type = type;
     if (search) {
@@ -74,6 +81,7 @@ router.post('/register', validateDevice, async (req, res, next) => {
     const device = await Device.create({
       ...req.body,
       device_key: deviceKey,
+      created_by: req.user._id,
       status: 'offline',
       deployment_status: 'idle',
       api_status: 'not-connected'
@@ -198,7 +206,10 @@ router.get('/status/:id', async (req, res, next) => {
 // @access  Private
 router.get('/:id', async (req, res, next) => {
   try {
-    const device = await Device.findById(req.params.id).select('-ssh_password');
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    }).select('-ssh_password');
     
     if (!device) {
       return res.status(404).json({
@@ -345,12 +356,15 @@ router.post('/:id/connect', async (req, res, next) => {
 });
 
 // @route   POST /api/devices/:id/execute
-// @desc    Execute command on device
+// @desc    Execute command on device via HTTP API
 // @access  Private
 router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next) => {
   try {
     const { command, action_type } = req.body;
-    const device = await Device.findById(req.params.id);
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    });
     
     if (!device) {
       return res.status(404).json({
@@ -359,10 +373,13 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
       });
     }
 
-    // Ensure SSH connection exists
-    let connection = sshManager.getConnection(device._id.toString());
-    if (!connection) {
-      await sshManager.connect(device);
+    // Check if device API is reachable
+    const isReachable = await httpApiManager.isDeviceReachable(device);
+    if (!isReachable) {
+      return res.status(503).json({
+        success: false,
+        error: `Device ${device.name} is not reachable. Make sure the edge server is running.`
+      });
     }
 
     // Create activity log
@@ -376,8 +393,8 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
     });
 
     try {
-      // Execute command
-      const result = await sshManager.executeCommand(device._id.toString(), command);
+      // Execute command using HTTP API
+      const result = await httpApiManager.executeCommand(device, command);
       
       // Update activity with results
       activity.status = result.code === 0 ? 'success' : 'failed';
@@ -388,6 +405,8 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
 
       // Update device last seen
       device.last_seen = new Date();
+      device.status = 'online';
+      device.api_status = 'connected';
       await device.save();
 
       logger.info(`Command executed on device ${device.name} by ${req.user?.username || 'system'}: ${command}`);
@@ -408,6 +427,15 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
       activity.end_time = new Date();
       await activity.save();
 
+      // Update device status if connection failed
+      try {
+        device.status = 'offline';
+        device.api_status = 'error';
+        await device.save();
+      } catch (updateError) {
+        logger.error('Failed to update device status:', updateError);
+      }
+
       throw execError;
     }
   } catch (error) {
@@ -416,11 +444,14 @@ router.post('/:id/execute', sshRateLimit, validateCommand, async (req, res, next
 });
 
 // @route   GET /api/devices/:id/status
-// @desc    Get real-time device status and metrics
+// @desc    Get real-time device status and metrics via HTTP API
 // @access  Private
 router.get('/:id/status', async (req, res, next) => {
   try {
-    const device = await Device.findById(req.params.id);
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    });
     
     if (!device) {
       return res.status(404).json({
@@ -433,27 +464,34 @@ router.get('/:id/status', async (req, res, next) => {
     let connectionStatus = 'disconnected';
 
     try {
-      // Ensure SSH connection
-      let connection = sshManager.getConnection(device._id.toString());
-      if (!connection) {
-        await sshManager.connect(device);
-      }
-      
-      // Get fresh system info
-      systemInfo = await sshManager.getSystemInfo(device._id.toString());
+      // Get fresh system info using HTTP API
+      systemInfo = await httpApiManager.getSystemStats(device);
       connectionStatus = 'connected';
 
       // Update device with fresh data
-      device.cpu_usage = parseFloat(systemInfo.cpu) || 0;
-      device.ram_usage = parseFloat(systemInfo.memory) || 0;
-      device.temperature = parseFloat(systemInfo.temperature) || 0;
+      if (systemInfo.cpu_usage !== undefined) {
+        device.cpu_usage = parseFloat(systemInfo.cpu_usage) || 0;
+      }
+      if (systemInfo.memory?.percentage !== undefined) {
+        device.ram_usage = parseFloat(systemInfo.memory.percentage) || 0;
+      }
+      if (systemInfo.temperature !== undefined) {
+        // Handle temperature object or direct value
+        const tempValue = typeof systemInfo.temperature === 'object' 
+          ? Object.values(systemInfo.temperature)[0] || 0
+          : systemInfo.temperature;
+        device.temperature = parseFloat(tempValue) || 0;
+      }
+      
       device.status = 'online';
+      device.api_status = 'connected';
       device.last_seen = new Date();
       await device.save();
 
-    } catch (sshError) {
-      logger.warn(`Failed to get system info for device ${device.name}: ${sshError.message}`);
+    } catch (apiError) {
+      logger.warn(`Failed to get system info for device ${device.name}: ${apiError.message}`);
       device.status = 'offline';
+      device.api_status = 'error';
       await device.save();
     }
 
@@ -467,7 +505,8 @@ router.get('/:id/status', async (req, res, next) => {
           cpu_usage: device.cpu_usage,
           ram_usage: device.ram_usage,
           temperature: device.temperature,
-          last_seen: device.last_seen
+          last_seen: device.last_seen,
+          api_status: device.api_status
         },
         systemInfo,
         connectionStatus
@@ -479,12 +518,15 @@ router.get('/:id/status', async (req, res, next) => {
 });
 
 // @route   GET /api/devices/:id/files
-// @desc    Browse device filesystem
+// @desc    Browse device filesystem via HTTP API
 // @access  Private
 router.get('/:id/files', async (req, res, next) => {
   try {
     const { path = '/' } = req.query;
-    const device = await Device.findById(req.params.id);
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    });
     
     if (!device) {
       return res.status(404).json({
@@ -493,13 +535,23 @@ router.get('/:id/files', async (req, res, next) => {
       });
     }
 
-    // Ensure SSH connection
-    let connection = sshManager.getConnection(device._id.toString());
-    if (!connection) {
-      await sshManager.connect(device);
+    // Check if device API is reachable
+    const isReachable = await httpApiManager.isDeviceReachable(device);
+    if (!isReachable) {
+      return res.status(503).json({
+        success: false,
+        error: `Device ${device.name} is not reachable. Make sure the edge server is running.`
+      });
     }
 
-    const files = await sshManager.listDirectory(device._id.toString(), path);
+    // List directory using HTTP API
+    const files = await httpApiManager.listDirectory(device, path);
+
+    // Update device last seen
+    device.last_seen = new Date();
+    device.status = 'online';
+    device.api_status = 'connected';
+    await device.save();
 
     res.json({
       success: true,
@@ -509,6 +561,198 @@ router.get('/:id/files', async (req, res, next) => {
       }
     });
   } catch (error) {
+    logger.error(`Failed to list files for device ${req.params.id}: ${error.message}`);
+    
+    // Update device status to offline if connection failed
+    try {
+      const device = await Device.findById(req.params.id);
+      if (device) {
+        device.status = 'offline';
+        device.api_status = 'error';
+        await device.save();
+      }
+    } catch (updateError) {
+      logger.error('Failed to update device status:', updateError);
+    }
+
+    next(error);
+  }
+});
+
+// @route   GET /api/devices/:id/files/read
+// @desc    Read file contents from device
+// @access  Private
+router.get('/:id/files/read', async (req, res, next) => {
+  try {
+    const { path } = req.query;
+    
+    if (!path) {
+      return res.status(400).json({
+        success: false,
+        error: 'File path is required'
+      });
+    }
+
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    });
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Read file using HTTP API
+    const content = await httpApiManager.readFile(device, path);
+
+    // Update device last seen
+    device.last_seen = new Date();
+    await device.save();
+
+    // Return file content as plain text
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(content);
+  } catch (error) {
+    logger.error(`Failed to read file for device ${req.params.id}: ${error.message}`);
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/:id/files/write
+// @desc    Write file contents to device
+// @access  Private
+router.post('/:id/files/write', async (req, res, next) => {
+  try {
+    const { path, content } = req.body;
+    
+    if (!path) {
+      return res.status(400).json({
+        success: false,
+        error: 'File path is required'
+      });
+    }
+
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    });
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Write file using HTTP API
+    const result = await httpApiManager.writeFile(device, path, content || '');
+
+    // Update device last seen
+    device.last_seen = new Date();
+    await device.save();
+
+    // Log activity
+    await DeviceActivity.create({
+      device_id: device._id,
+      action_type: 'file_write',
+      command: `Write file: ${path}`,
+      status: 'success',
+      log_output: `File written successfully: ${path}`,
+      triggered_by: req.user?.username || 'system'
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error(`Failed to write file for device ${req.params.id}: ${error.message}`);
+    
+    // Log failed activity
+    try {
+      await DeviceActivity.create({
+        device_id: req.params.id,
+        action_type: 'file_write',
+        command: `Write file: ${req.body.path}`,
+        status: 'failed',
+        error_message: error.message,
+        triggered_by: req.user?.username || 'system'
+      });
+    } catch (logError) {
+      logger.error('Failed to log file write activity:', logError);
+    }
+
+    next(error);
+  }
+});
+
+// @route   DELETE /api/devices/:id/files/delete
+// @desc    Delete file or directory on device
+// @access  Private
+router.delete('/:id/files/delete', async (req, res, next) => {
+  try {
+    const { path } = req.body;
+    
+    if (!path) {
+      return res.status(400).json({
+        success: false,
+        error: 'File path is required'
+      });
+    }
+
+    const device = await Device.findOne({ 
+      _id: req.params.id, 
+      created_by: req.user._id 
+    });
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Delete file using HTTP API
+    const result = await httpApiManager.deleteFile(device, path);
+
+    // Update device last seen
+    device.last_seen = new Date();
+    await device.save();
+
+    // Log activity
+    await DeviceActivity.create({
+      device_id: device._id,
+      action_type: 'file_delete',
+      command: `Delete: ${path}`,
+      status: 'success',
+      log_output: `File/directory deleted successfully: ${path}`,
+      triggered_by: req.user?.username || 'system'
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    logger.error(`Failed to delete file for device ${req.params.id}: ${error.message}`);
+    
+    // Log failed activity
+    try {
+      await DeviceActivity.create({
+        device_id: req.params.id,
+        action_type: 'file_delete',
+        command: `Delete: ${req.body.path}`,
+        status: 'failed',
+        error_message: error.message,
+        triggered_by: req.user?.username || 'system'
+      });
+    } catch (logError) {
+      logger.error('Failed to log file delete activity:', logError);
+    }
+
     next(error);
   }
 });

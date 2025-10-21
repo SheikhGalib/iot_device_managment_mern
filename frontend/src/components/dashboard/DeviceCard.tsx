@@ -2,9 +2,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Cpu, HardDrive, Thermometer, ChevronRight } from "lucide-react";
+import { Cpu, HardDrive, Thermometer, ChevronRight, Copy } from "lucide-react";
 import { Device } from "@/lib/deviceApi";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 interface DeviceCardProps {
   device: Device;
@@ -12,6 +13,16 @@ interface DeviceCardProps {
 
 const DeviceCard = ({ device }: DeviceCardProps) => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const copyDeviceKey = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    navigator.clipboard.writeText(device.device_key);
+    toast({
+      title: "Copied!",
+      description: "Device key copied to clipboard",
+    });
+  };
 
   return (
     <Card className="relative p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate(`/dashboard/device/${device._id}`)}>
@@ -57,6 +68,18 @@ const DeviceCard = ({ device }: DeviceCardProps) => {
       <div className="text-xs text-muted-foreground mb-4">
         <p>MAC: {device.mac_address}</p>
         <p>IP: {device.ip_address}:{device.ssh_port}</p>
+        <div className="flex items-center justify-between">
+          <span>Device Key: {device.device_key.slice(0, 20)}...</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={copyDeviceKey}
+            className="h-6 w-6 p-0 hover:bg-muted"
+            title="Copy device key"
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+        </div>
         <p>Last seen: {new Date(device.last_seen).toLocaleDateString()}</p>
       </div>
 

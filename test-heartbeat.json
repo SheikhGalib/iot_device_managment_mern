@@ -1,0 +1,16 @@
+{
+  "cpu_usage": 15.2,
+  "ram_usage": 45.8,
+  "temperature": 42,
+  "timestamp": "2025-10-16T10:00:00Z",
+  "network_info": {
+    "ip_address": "172.30.30.233",
+    "mac_address": "00:15:5d:d3:07:91"
+  },
+  "server_info": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "http_port": 8081,
+    "public_http_url": "https://your-edge-server-ngrok-url.ngrok-free.app"
+  }
+}

@@ -8,6 +8,7 @@ const validateDevice = (req, res, next) => {
     ssh_port: Joi.number().integer().min(1).max(65535).default(22),
     ssh_username: Joi.string().min(1).max(50).required(),
     ssh_password: Joi.string().min(1).required(),
+    http_port: Joi.number().integer().min(1).max(65535).default(8081),
     mac_address: Joi.string().pattern(/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/).required(),
     metadata: Joi.object({
       os: Joi.string().allow(''),
@@ -37,6 +38,7 @@ const validateDeviceUpdate = (req, res, next) => {
     ssh_port: Joi.number().integer().min(1).max(65535),
     ssh_username: Joi.string().min(1).max(50),
     ssh_password: Joi.string().min(1),
+    http_port: Joi.number().integer().min(1).max(65535),
     mac_address: Joi.string().pattern(/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/),
     status: Joi.string().valid('online', 'offline'),
     deployment_status: Joi.string().valid('idle', 'running', 'error'),
