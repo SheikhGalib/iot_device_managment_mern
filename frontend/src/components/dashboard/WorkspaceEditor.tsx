@@ -31,6 +31,7 @@ import {
 import { useToast } from '../../hooks/use-toast';
 import { WidgetCard } from './WidgetCard';
 import { WidgetSettingsModal } from './WidgetSettingsModal';
+import DeviceLinkingModal from './DeviceLinkingModal';
 import { workspaceService, type Workspace, type Widget, type LayoutItem, type WidgetType } from '../../lib/workspaceApi';
 
 // Import CSS for react-grid-layout
@@ -54,6 +55,8 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [widgetTypes, setWidgetTypes] = useState<WidgetType[]>([]);
   const [gridSettings, setGridSettings] = useState(workspace.gridSettings);
+  const [linkingWidget, setLinkingWidget] = useState<Widget | null>(null);
+  const [deviceLinkingOpen, setDeviceLinkingOpen] = useState(false);
   const { toast } = useToast();
 
   // Load widget types on mount
@@ -250,6 +253,25 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
     }
   };
 
+  const handleLinkDevice = (widget: Widget) => {
+    setLinkingWidget(widget);
+    setDeviceLinkingOpen(true);
+  };
+
+  const handleDeviceLinked = (widgetId: string, deviceId: string) => {
+    // Update the widget in state to reflect the device linking
+    setWidgets(prev => prev.map(w => 
+      w._id === widgetId 
+        ? { ...w, deviceId, dataPath: linkingWidget?.type ? `${linkingWidget.type}-control` : undefined }
+        : w
+    ));
+    
+    toast({
+      title: 'Success',
+      description: 'Device linked to widget successfully'
+    });
+  };
+
   const handleExportWorkspace = async () => {
     try {
       const response = await workspaceService.exportWorkspace(workspace._id);
@@ -409,6 +431,7 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
                   onEdit={handleEditWidget}
                   onDuplicate={handleDuplicateWidget}
                   onDelete={handleDeleteWidget}
+                  onLinkDevice={handleLinkDevice}
                   isEditing={isEditing}
                 />
               </div>
@@ -470,6 +493,14 @@ export function WorkspaceEditor({ workspace, onBack, onWorkspaceUpdate }: Worksp
           onSave={handleUpdateWidget}
         />
       )}
+
+      {/* Device Linking Modal */}
+      <DeviceLinkingModal
+        widget={linkingWidget}
+        open={deviceLinkingOpen}
+        onOpenChange={setDeviceLinkingOpen}
+        onDeviceLinked={handleDeviceLinked}
+      />
     </div>
   );
 }

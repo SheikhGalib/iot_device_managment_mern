@@ -9,7 +9,20 @@ const deviceSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['Raspberry Pi', 'Orange Pi', 'Windows PC', 'Linux Server', 'Other']
+    enum: ['ESP32', 'ESP8266', 'Arduino', 'NodeMCU', 'Raspberry Pi', 'Orange Pi', 'Windows PC', 'Linux Server', 'Ubuntu', 'Other']
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxLength: 500
+  },
+  category: {
+    type: String,
+    required: true,
+    enum: ['IoT', 'Computer'],
+    default: function() {
+      return ['ESP32', 'ESP8266', 'Arduino'].includes(this.type) ? 'IoT' : 'Computer';
+    }
   },
   // User who created this device
   created_by: {
@@ -19,9 +32,10 @@ const deviceSchema = new mongoose.Schema({
   },
   ip_address: {
     type: String,
-    required: true,
+    required: function() { return this.category === 'Computer'; },
     validate: {
       validator: function(v) {
+        if (!v && this.category === 'IoT') return true; // IP optional for IoT devices
         return /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(v);
       },
       message: 'Invalid IP address format'
@@ -31,15 +45,16 @@ const deviceSchema = new mongoose.Schema({
     type: Number,
     default: 22,
     min: 1,
-    max: 65535
+    max: 65535,
+    required: function() { return this.category === 'Computer'; }
   },
   ssh_username: {
     type: String,
-    required: true
+    required: function() { return this.category === 'Computer'; }
   },
   ssh_password: {
     type: String,
-    required: true // Note: Replace with SSH keys in production
+    required: function() { return this.category === 'Computer'; }
   },
   http_port: {
     type: Number,
@@ -49,9 +64,10 @@ const deviceSchema = new mongoose.Schema({
   },
   mac_address: {
     type: String,
-    required: true,
+    required: false, // Made optional
     validate: {
       validator: function(v) {
+        if (!v) return true; // Allow empty
         return /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(v);
       },
       message: 'Invalid MAC address format'
@@ -104,6 +120,25 @@ const deviceSchema = new mongoose.Schema({
     enum: ['idle', 'running', 'error'],
     default: 'idle'
   },
+  // IoT-specific fields
+  supported_apis: [{
+    type: String,
+    enum: ['temperature-control', 'humidity-control', 'led-control', 'gps-control', 'camera-control']
+  }],
+  current_data: {
+    type: Map,
+    of: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+  last_data_received: {
+    type: Date
+  },
+  heartbeat_interval: {
+    type: Number,
+    default: 30000, // 30 seconds
+    min: 1000 // minimum 1 second
+  },
+  // Computer-specific metadata (only for Computer category)
   metadata: {
     os: String,
     version: String,

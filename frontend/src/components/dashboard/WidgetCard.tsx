@@ -15,7 +15,11 @@ import {
   MoreVertical,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  Link,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -27,12 +31,14 @@ import {
   DropdownMenuTrigger 
 } from '../ui/dropdown-menu';
 import { type Widget } from '../../lib/workspaceApi';
+import { useDeviceData } from '../../hooks/useDeviceData';
 
 interface WidgetCardProps {
   widget: Widget;
   onEdit: (widget: Widget) => void;
   onDuplicate: (widget: Widget) => void;
   onDelete: (widget: Widget) => void;
+  onLinkDevice: (widget: Widget) => void;
   isEditing?: boolean;
 }
 
@@ -278,8 +284,53 @@ const generateMockValue = (widget: Widget) => {
   }
 };
 
-export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, isEditing = false }: WidgetCardProps) {
+export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice, isEditing = false }: WidgetCardProps) {
   const [mockValue] = useState(() => generateMockValue(widget));
+  
+  // Use real device data if widget is linked to a device
+  const { 
+    data: deviceData, 
+    device, 
+    loading, 
+    error, 
+    isConnected, 
+    refresh 
+  } = useDeviceData({
+    deviceId: widget.deviceId,
+    dataPath: widget.dataPath,
+    refreshInterval: widget.settings.refreshInterval || 5000,
+    enabled: !!widget.deviceId && widget.isActive
+  });
+
+  // Determine which value to use - real device data or mock data
+  const getCurrentValue = () => {
+    if (!widget.deviceId || !deviceData) {
+      return mockValue; // Use mock data if no device linked or no real data
+    }
+
+    // Extract the appropriate value based on widget type and device data
+    switch (widget.type) {
+      case 'temperature':
+        return deviceData.temperature ?? mockValue;
+      case 'humidity':
+        return deviceData.humidity ?? mockValue;
+      case 'led':
+        return deviceData.led_state ?? mockValue;
+      case 'gps':
+        if (deviceData.latitude !== undefined && deviceData.longitude !== undefined) {
+          return {
+            lat: deviceData.latitude.toFixed(6),
+            lng: deviceData.longitude.toFixed(6),
+            address: "Real GPS Location"
+          };
+        }
+        return mockValue;
+      default:
+        return mockValue;
+    }
+  };
+
+  const currentValue = getCurrentValue();
 
   return (
     <Card className="h-full flex flex-col relative group">
@@ -304,6 +355,10 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, isEditing = 
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onLinkDevice(widget)}>
+                    <Link className="mr-2 h-4 w-4" />
+                    Link Device
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onEdit(widget)}>
                     <Settings className="mr-2 h-4 w-4" />
                     Edit Settings
@@ -326,23 +381,44 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, isEditing = 
         </div>
         
         {widget.deviceId && (
-          <div className="text-xs text-muted-foreground">
-            Device: {widget.deviceId}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center space-x-1">
+              <span>Device: {device?.name || widget.deviceId.slice(-8)}</span>
+              {isConnected ? (
+                <Wifi className="h-3 w-3 text-green-500" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-gray-400" />
+              )}
+            </div>
+            {loading && <RefreshCw className="h-3 w-3 animate-spin" />}
           </div>
         )}
       </CardHeader>
       
       <CardContent className="flex-1 pt-0">
-        {renderWidgetContent(widget, mockValue)}
+        {error ? (
+          <div className="flex flex-col items-center justify-center h-full space-y-2 text-red-500">
+            <AlertTriangle className="h-6 w-6" />
+            <div className="text-xs text-center">Device Error</div>
+          </div>
+        ) : (
+          renderWidgetContent(widget, currentValue)
+        )}
       </CardContent>
       
       {/* Connection status indicator */}
       <div className="absolute top-2 right-2">
         <div 
           className={`w-2 h-2 rounded-full ${
-            widget.isActive ? 'bg-green-500' : 'bg-gray-400'
+            widget.deviceId 
+              ? (isConnected ? 'bg-green-500' : 'bg-red-500')
+              : (widget.isActive ? 'bg-blue-500' : 'bg-gray-400')
           }`}
-          title={widget.isActive ? 'Active' : 'Inactive'}
+          title={
+            widget.deviceId 
+              ? (isConnected ? 'Device Online' : 'Device Offline')
+              : (widget.isActive ? 'Active (Mock Data)' : 'Inactive')
+          }
         />
       </div>
     </Card>

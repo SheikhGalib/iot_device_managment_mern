@@ -4,19 +4,26 @@ export interface Device {
   _id: string;
   name: string;
   type: string;
-  ip_address: string;
-  ssh_port: number;
-  ssh_username: string;
-  mac_address: string;
+  category: 'IoT' | 'Computer';
+  ip_address?: string;
+  ssh_port?: number;
+  ssh_username?: string;
+  mac_address?: string;
   device_key: string;
   status: 'online' | 'offline';
   api_status?: 'not-connected' | 'connected' | 'error';
   last_seen: string;
-  cpu_usage: number;
-  ram_usage: number;
-  temperature: number;
-  deployment_status: 'idle' | 'running' | 'error';
-  active_sessions: number;
+  cpu_usage?: number;
+  ram_usage?: number;
+  temperature?: number;
+  deployment_status?: 'idle' | 'running' | 'error';
+  active_sessions?: number;
+  // IoT-specific fields
+  supported_apis?: string[];
+  current_data?: { [key: string]: any };
+  last_data_received?: string;
+  heartbeat_interval?: number;
+  // Computer-specific metadata
   metadata?: {
     os?: string;
     version?: string;
@@ -126,6 +133,23 @@ export const deviceApi = {
   // Get device logs
   getDeviceLogs: async (id: string, page = 1, limit = 50) => {
     const response = await api.get(`/devices/${id}/logs`, { params: { page, limit } });
+    return response;
+  },
+
+  // IoT-specific methods
+  getSupportedApis: async (id: string) => {
+    const response = await api.get(`/devices/${id}/supported-apis`);
+    return response;
+  },
+
+  getCurrentData: async (id: string) => {
+    const response = await api.get(`/devices/${id}/current-data`);
+    return response;
+  },
+
+  // Get ESP32 code templates
+  getCodeTemplate: async (deviceId: string, apiType: string) => {
+    const response = await api.get(`/devices/${deviceId}/code-template/${apiType}`);
     return response;
   },
 };

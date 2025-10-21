@@ -13,8 +13,8 @@ const router = express.Router();
 
 // Apply authentication to all device routes except heartbeat endpoints
 router.use((req, res, next) => {
-  // Skip authentication for heartbeat and status endpoints called by edge servers
-  if (req.path.includes('/heartbeat/') || req.path.includes('/api-status/')) {
+  // Skip authentication for heartbeat and status endpoints called by edge servers and IoT devices
+  if (req.path.includes('/heartbeat') || req.path.includes('/api-status') || req.path.includes('/led-control') || req.path.includes('/temperature-control') || req.path.includes('/humidity-control')) {
     return next();
   }
   authenticate(req, res, next);
@@ -952,6 +952,263 @@ router.post('/heartbeat/:deviceKey', async (req, res, next) => {
     res.json({
       success: true,
       message: 'Heartbeat received'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/:id/temperature-control
+// @desc    Receive temperature data from IoT device
+// @access  Public (no auth - called by ESP32)
+router.post('/:id/temperature-control', async (req, res, next) => {
+  try {
+    const { temperature, unit } = req.body;
+    
+    if (temperature === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Temperature value is required'
+      });
+    }
+
+    const device = await Device.findById(req.params.id);
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Update device data
+    device.current_data.set('temperature', {
+      value: temperature,
+      unit: unit || 'Celsius',
+      timestamp: new Date()
+    });
+    device.last_data_received = new Date();
+    device.status = 'online';
+    device.last_seen = new Date();
+
+    await device.save();
+
+    logger.info(`Temperature data received from device ${device.name}: ${temperature}${unit || '°C'}`);
+
+    res.json({
+      success: true,
+      message: 'Temperature data received',
+      data: { temperature, unit }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/:id/humidity-control
+// @desc    Receive humidity data from IoT device
+// @access  Public (no auth - called by ESP32)
+router.post('/:id/humidity-control', async (req, res, next) => {
+  try {
+    const { humidity, unit } = req.body;
+    
+    if (humidity === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Humidity value is required'
+      });
+    }
+
+    const device = await Device.findById(req.params.id);
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Update device data
+    device.current_data.set('humidity', {
+      value: humidity,
+      unit: unit || '%',
+      timestamp: new Date()
+    });
+    device.last_data_received = new Date();
+    device.status = 'online';
+    device.last_seen = new Date();
+
+    await device.save();
+
+    logger.info(`Humidity data received from device ${device.name}: ${humidity}${unit || '%'}`);
+
+    res.json({
+      success: true,
+      message: 'Humidity data received',
+      data: { humidity, unit }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/:id/led-control
+// @desc    Receive LED state data from IoT device
+// @access  Public (no auth - called by ESP32)
+router.post('/:deviceKey/led-control', async (req, res, next) => {
+  try {
+    const { led_state, brightness } = req.body;
+    
+    if (led_state === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'LED state is required'
+      });
+    }
+
+    const device = await Device.findOne({ device_key: req.params.deviceKey });
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Update device data
+    device.current_data.set('led', {
+      state: led_state,
+      brightness: brightness || 100,
+      timestamp: new Date()
+    });
+    device.last_data_received = new Date();
+    device.status = 'online';
+    device.last_seen = new Date();
+
+    await device.save();
+
+    logger.info(`LED data received from device ${device.name}: state=${led_state}, brightness=${brightness || 100}`);
+
+    res.json({
+      success: true,
+      message: 'LED data received',
+      data: { led_state, brightness }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/:id/gps-control
+// @desc    Receive GPS data from IoT device
+// @access  Public (no auth - called by ESP32)
+router.post('/:id/gps-control', async (req, res, next) => {
+  try {
+    const { latitude, longitude, altitude, accuracy } = req.body;
+    
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Latitude and longitude are required'
+      });
+    }
+
+    const device = await Device.findById(req.params.id);
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    // Update device data
+    device.current_data.set('gps', {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      altitude: altitude ? parseFloat(altitude) : null,
+      accuracy: accuracy ? parseFloat(accuracy) : null,
+      timestamp: new Date()
+    });
+    device.last_data_received = new Date();
+    device.status = 'online';
+    device.last_seen = new Date();
+
+    await device.save();
+
+    logger.info(`GPS data received from device ${device.name}: ${latitude}, ${longitude}`);
+
+    res.json({
+      success: true,
+      message: 'GPS data received',
+      data: { latitude, longitude, altitude, accuracy }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/devices/:id/supported-apis
+// @desc    Get supported APIs for a device
+// @access  Private
+router.get('/:id/supported-apis', async (req, res, next) => {
+  try {
+    const device = await Device.findOne({
+      _id: req.params.id,
+      created_by: req.user._id
+    });
+
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    const apiTemplates = {
+      'temperature-control': {
+        name: 'Temperature Control',
+        description: 'Temperature sensor readings',
+        endpoint: `/api/devices/${device._id}/temperature-control`,
+        dataStructure: { temperature: 'number', unit: 'string (optional)' },
+        example: { temperature: 25.5, unit: 'Celsius' }
+      },
+      'humidity-control': {
+        name: 'Humidity Control',
+        description: 'Humidity sensor readings',
+        endpoint: `/api/devices/${device._id}/humidity-control`,
+        dataStructure: { humidity: 'number', unit: 'string (optional)' },
+        example: { humidity: 65.2, unit: '%' }
+      },
+      'led-control': {
+        name: 'LED Control',
+        description: 'LED state and brightness control',
+        endpoint: `/api/devices/${device._id}/led-control`,
+        dataStructure: { led_state: 'boolean', brightness: 'number (optional)' },
+        example: { led_state: true, brightness: 80 }
+      },
+      'gps-control': {
+        name: 'GPS Control',
+        description: 'GPS location data',
+        endpoint: `/api/devices/${device._id}/gps-control`,
+        dataStructure: { latitude: 'number', longitude: 'number', altitude: 'number (optional)', accuracy: 'number (optional)' },
+        example: { latitude: 40.7128, longitude: -74.0060, altitude: 10.5, accuracy: 5.0 }
+      }
+    };
+
+    const supportedApis = device.supported_apis || [];
+    const availableApis = supportedApis.map(api => apiTemplates[api]).filter(Boolean);
+
+    res.json({
+      success: true,
+      data: {
+        device: {
+          id: device._id,
+          name: device.name,
+          type: device.type
+        },
+        supportedApis: availableApis,
+        allAvailableApis: Object.keys(apiTemplates).map(key => ({
+          key,
+          ...apiTemplates[key]
+        }))
+      }
     });
   } catch (error) {
     next(error);

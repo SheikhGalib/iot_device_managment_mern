@@ -40,8 +40,7 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
     ssh_port: 22,
     ssh_username: '',
     ssh_password: '',
-    mac_address: '',
-    device_key: ''
+    mac_address: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<'form' | 'testing' | 'success'>('form');
@@ -58,8 +57,7 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
       ssh_port: 22,
       ssh_username: '',
       ssh_password: '',
-      mac_address: '',
-      device_key: ''
+      mac_address: ''
     });
     setStep('form');
     setConnectionResult(null);
@@ -73,7 +71,7 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
   };
 
   const validateForm = () => {
-    // Required fields for edge devices
+    // Required fields
     const requiredFields = ['name', 'type', 'ip_address', 'ssh_username', 'ssh_password'];
     for (const field of requiredFields) {
       if (!formData[field as keyof typeof formData]) {
@@ -122,30 +120,37 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
     setStep('testing');
 
     try {
-      console.log('Starting edge device registration...');
-
-      // Add category field and generate device key for backend
+      // Add category field for backend
       const deviceData = {
         ...formData,
-        category: 'Computer' as const, // All devices registered here are edge devices
-        device_key: `edge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        category: 'Computer' as const // All devices registered here are edge devices
       };
 
-      console.log('Registering device with data:', deviceData);
-
       const response = await deviceApi.registerDevice(deviceData);
+      
       console.log('Registration response:', response);
+      console.log('Response success:', (response as any).success);
+      console.log('Response data:', (response as any).data);
+      console.log('Response device_key:', (response as any).device_key);
+      
+      if ((response as any).success) {
+        // Device registered successfully, now monitor deployment progress
+        const deviceId = (response as any).data._id;
+        const deviceKey = (response as any).device_key;
 
-      if (response.data) {
+        console.log('Monitoring deployment for device ID:', deviceId);
+        console.log('Device Key:', deviceKey);
+        
+        // Show success with device key
         setStep('success');
         setConnectionResult({
           success: true,
-          message: 'Edge device registered successfully!'
+          message: `Device registered successfully! Device Key: ${deviceKey}`
         });
 
         toast({
-          title: "Success",
-          description: "Edge device registered and connection tested successfully!",
+          title: "Device Registered",
+          description: `Device registered with key: ${deviceKey}`,
         });
 
         // Call callback to refresh device list
@@ -153,11 +158,15 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
           onDeviceRegistered();
         }
 
+        console.log('Device registration and deployment monitoring completed.');
+
         // Auto close after 3 seconds
         setTimeout(() => {
           onOpenChange(false);
           resetForm();
         }, 3000);
+        
+        console.log('Modal will close automatically in 3 seconds.');
       }
     } catch (error: any) {
       console.error('Registration error:', error);
@@ -165,12 +174,12 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
       setStep('form');
       setConnectionResult({
         success: false,
-        message: error.message || 'Failed to register edge device'
+        message: error.message || 'Failed to register device'
       });
 
       toast({
         title: "Registration Failed",
-        description: error.message || "Failed to register edge device. Please check your connection details.",
+        description: error.message || "Failed to register device. Please check your connection details.",
         variant: "destructive"
       });
     } finally {
@@ -208,7 +217,7 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
                   id="name"
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
-                  placeholder="My Raspberry Pi"
+                  placeholder="ESP32 - Temperature Sensor"
                   disabled={isSubmitting}
                 />
               </div>
@@ -235,60 +244,77 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
                 </Select>
               </div>
 
-              {/* IP Address */}
-              <div className="space-y-2">
-                <Label htmlFor="ip_address">IP Address *</Label>
-                <Input
-                  id="ip_address"
-                  value={formData.ip_address}
-                  onChange={(e) => handleInputChange('ip_address', e.target.value)}
-                  placeholder="192.168.1.100"
-                  disabled={isSubmitting}
-                />
-              </div>
 
-              {/* SSH Port */}
-              <div className="space-y-2">
-                <Label htmlFor="ssh_port">SSH Port</Label>
-                <Input
-                  id="ssh_port"
-                  type="number"
-                  value={formData.ssh_port}
-                  onChange={(e) => handleInputChange('ssh_port', parseInt(e.target.value))}
-                  placeholder="22"
-                  disabled={isSubmitting}
-                />
-              </div>
+                  {/* IP Address */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ip_address">IP Address *</Label>
+                    <Input
+                      id="ip_address"
+                      value={formData.ip_address}
+                      onChange={(e) => handleInputChange('ip_address', e.target.value)}
+                      placeholder="192.168.1.100"
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-              {/* SSH Username */}
-              <div className="space-y-2">
-                <Label htmlFor="ssh_username">SSH Username *</Label>
-                <Input
-                  id="ssh_username"
-                  value={formData.ssh_username}
-                  onChange={(e) => handleInputChange('ssh_username', e.target.value)}
-                  placeholder="pi"
-                  disabled={isSubmitting}
-                />
-              </div>
+                  {/* SSH Port */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ssh_port">SSH Port</Label>
+                    <Input
+                      id="ssh_port"
+                      type="number"
+                      value={formData.ssh_port}
+                      onChange={(e) => handleInputChange('ssh_port', parseInt(e.target.value))}
+                      placeholder="22"
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-              {/* SSH Password */}
-              <div className="space-y-2">
-                <Label htmlFor="ssh_password">SSH Password *</Label>
-                <Input
-                  id="ssh_password"
-                  type="password"
-                  value={formData.ssh_password}
-                  onChange={(e) => handleInputChange('ssh_password', e.target.value)}
-                  placeholder="Password"
-                  disabled={isSubmitting}
-                />
-              </div>
+                  {/* SSH Username */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ssh_username">SSH Username *</Label>
+                    <Input
+                      id="ssh_username"
+                      value={formData.ssh_username}
+                      onChange={(e) => handleInputChange('ssh_username', e.target.value)}
+                      placeholder="pi"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {/* SSH Password */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ssh_password">SSH Password *</Label>
+                    <Input
+                      id="ssh_password"
+                      type="password"
+                      value={formData.ssh_password}
+                      onChange={(e) => handleInputChange('ssh_password', e.target.value)}
+                      placeholder="Password"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* IoT-specific fields */}
+              {formData.category === 'IoT' && (
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="ip_address">IP Address (Optional)</Label>
+                  <Input
+                    id="ip_address"
+                    value={formData.ip_address}
+                    onChange={(e) => handleInputChange('ip_address', e.target.value)}
+                    placeholder="192.168.1.100 (will be auto-detected)"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              )}
             </div>
 
             {/* MAC Address */}
             <div className="space-y-2">
-              <Label htmlFor="mac_address">MAC Address (Optional)</Label>
+              <Label htmlFor="mac_address">MAC Address {formData.category === 'Computer' ? '*' : '(Optional)'}</Label>
               <Input
                 id="mac_address"
                 value={formData.mac_address}
@@ -297,6 +323,52 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
                 disabled={isSubmitting}
               />
             </div>
+
+            {/* IoT Supported APIs */}
+            {formData.category === 'IoT' && (
+              <div className="space-y-3">
+                <Label>Supported APIs *</Label>
+                <p className="text-sm text-muted-foreground">
+                  Select the APIs this device will support. This determines what data it can send.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: 'temperature-control', name: 'Temperature Control', desc: 'Temperature sensor readings' },
+                    { key: 'humidity-control', name: 'Humidity Control', desc: 'Humidity sensor readings' },
+                    { key: 'led-control', name: 'LED Control', desc: 'LED state and brightness' },
+                    { key: 'gps-control', name: 'GPS Control', desc: 'GPS location data' }
+                  ].map((api) => (
+                    <Card 
+                      key={api.key} 
+                      className={`cursor-pointer transition-colors ${
+                        formData.supported_apis.includes(api.key) ? 'bg-primary/5 border-primary' : 'hover:bg-muted/50'
+                      }`}
+                      onClick={() => {
+                        const newApis = formData.supported_apis.includes(api.key)
+                          ? formData.supported_apis.filter(a => a !== api.key)
+                          : [...formData.supported_apis, api.key];
+                        handleInputChange('supported_apis', newApis);
+                      }}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.supported_apis.includes(api.key)}
+                            onChange={() => {}} // Handled by card click
+                            className="rounded"
+                          />
+                          <div>
+                            <div className="font-medium text-sm">{api.name}</div>
+                            <div className="text-xs text-muted-foreground">{api.desc}</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Connection Result */}
             {connectionResult && (
@@ -332,7 +404,7 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
                     Testing Connection...
                   </>
                 ) : (
-                  'Register Edge Device'
+                  'Register Device'
                 )}
               </Button>
             </div>
@@ -341,23 +413,20 @@ const DeviceRegistrationModal: React.FC<DeviceRegistrationModalProps> = ({
 
         {step === 'testing' && (
           <div className="text-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
             <h3 className="text-lg font-medium mb-2">Testing Connection</h3>
             <p className="text-muted-foreground">
-              Connecting to the device and verifying SSH access...
+              We're establishing an SSH connection to verify your device credentials...
             </p>
           </div>
         )}
 
         {step === 'success' && (
           <div className="text-center py-8">
-            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-600" />
             <h3 className="text-lg font-medium mb-2">Device Registered Successfully!</h3>
-            <p className="text-muted-foreground mb-4">
-              The edge device has been registered and is ready for management.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              This dialog will close automatically in a few seconds...
+            <p className="text-muted-foreground">
+              {connectionResult?.message}
             </p>
           </div>
         )}
