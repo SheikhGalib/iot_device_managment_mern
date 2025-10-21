@@ -20,19 +20,19 @@ const authRateLimit = createRateLimit(
 
 const generalRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
-  100, // limit each IP to 100 requests per windowMs
+  1000, // limit each IP to 1000 requests per windowMs (much more lenient)
   'Too many requests from this IP, try again later'
 );
 
 const sshRateLimit = createRateLimit(
   60 * 1000, // 1 minute
-  10, // limit each IP to 10 SSH commands per minute
+  100, // limit each IP to 100 SSH commands per minute
   'Too many SSH commands, try again later'
 );
 
 const iotRateLimit = createRateLimit(
   60 * 1000, // 1 minute
-  50, // limit each IP to 50 requests per minute (allows heartbeat + data every 5 seconds)
+  500, // limit each IP to 500 requests per minute (very lenient for IoT)
   'Too many IoT requests, try again later'
 );
 

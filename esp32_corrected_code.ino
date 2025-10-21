@@ -2,46 +2,70 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
+#define LED_BUILTIN 2 // Define manually for ESP32
+
 // WiFi Configuration
-const char* ssid = "YourHotspotName";
-const char* password = "YourHotspotPassword";
+const char *ssid = "YOUR_WIFI_SSID";
+const char *password = "YOUR_WIFI_PASSWORD";
 
 // Backend Configuration
-const char* serverBase = "http://192.168.4.1:5000/api/devices";
-const char* deviceId = "68f8040b0689b254720691b0";
+const char *serverBase = "http://192.168.137.1:3001/api/devices";
+const char *deviceKey = "device_221d491a20eb4605b518d8382ac380fb"; // Use device_key
 
 unsigned long previousMillis = 0;
-const long interval = 5000;
+const long interval = 10000; // Send data every 10 seconds
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(LED_BUILTIN, OUTPUT);
-  WiFi.begin(ssid, password);
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi Connected!");
+unsigned long ledPreviousMillis = 0;
+const long ledInterval = 2000; // Toggle LED every 2 seconds
+bool ledState = false;
+
+void setup()
+{
+    pinMode(LED_BUILTIN, OUTPUT);
+    Serial.begin(115200);
+
+    WiFi.begin(ssid, password);
+    Serial.println("Connecting to WiFi...");
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(1000);
+        Serial.print(".");
+    }
+    Serial.println("\nWiFi Connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
 }
 
-void loop() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
+void loop()
+{
+    unsigned long currentMillis = millis();
+        
+    // Toggle LED every 2 seconds
+    if (currentMillis - ledPreviousMillis >= ledInterval)
+    {
+        ledPreviousMillis = currentMillis;
+        ledState = !ledState;
+        digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
+        Serial.printf("LED %s\n", ledState ? "ON" : "OFF");
+    }
+
     
-    sendHeartbeat();
-    
-    // Toggle LED for demonstration
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    sendLedData();
-  }
+    if (currentMillis - previousMillis >= interval)
+    {
+        previousMillis = currentMillis;
+
+        // Send heartbeat and LED data with a small delay between them
+        sendHeartbeat();
+        delay(1000); // 1 second delay between requests
+        sendLedData();
+    }
 }
 
-void sendHeartbeat() {
+void sendHeartbeat()
+{
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    String url = String(serverBase) + "/" + deviceId + "/heartbeat";
+    String url = String(serverBase) + "/" + deviceKey + "/heartbeat";
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     
@@ -50,26 +74,34 @@ void sendHeartbeat() {
   }
 }
 
-void sendLedData() {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String url = String(serverBase) + "/" + deviceId + "/led-control";
-    http.begin(url);
-    http.addHeader("Content-Type", "application/json");
-    
-    bool ledState = digitalRead(LED_BUILTIN);
-    
-    StaticJsonDocument<200> doc;
-    doc["led_state"] = ledState;
-    doc["brightness"] = 100;
-    
-    String requestBody;
-    serializeJson(doc, requestBody);
-    
-    int httpResponseCode = http.POST(requestBody);
-    if (httpResponseCode > 0) {
-      Serial.printf("LED state sent: %s, Response: %d\n", ledState ? "ON" : "OFF", httpResponseCode);
+void sendLedData()
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        HTTPClient http;
+        String url = String(serverBase) + "/" + deviceKey + "/led-control"; 
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+
+        bool ledState = digitalRead(LED_BUILTIN);
+
+        JsonDocument doc;
+        doc["led_state"] = ledState;
+        doc["brightness"] = 100;
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        int httpResponseCode = http.POST(requestBody);
+        if (httpResponseCode > 0)
+        {
+            String response = http.getString();
+            Serial.printf("LED state sent: %s, Response: %d - %s\n", ledState ? "ON" : "OFF", httpResponseCode, response.c_str());
+        }
+        else
+        {
+            Serial.printf("Error sending LED state: %d\n", httpResponseCode);
+        }
+        http.end();
     }
-    http.end();
-  }
 }

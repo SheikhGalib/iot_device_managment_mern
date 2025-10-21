@@ -14,7 +14,7 @@ const router = express.Router();
 // Apply authentication to all device routes except heartbeat endpoints
 router.use((req, res, next) => {
   // Skip authentication for heartbeat and status endpoints called by edge servers and IoT devices
-  if (req.path.includes('/heartbeat') || req.path.includes('/api-status') || req.path.includes('/led-control') || req.path.includes('/temperature-control') || req.path.includes('/humidity-control')) {
+  if (req.path.includes('/heartbeat') || req.path.includes('/api-status') || req.path.includes('/led-control') || req.path.includes('/temperature-control') || req.path.includes('/humidity-control') || req.path.includes('/gps-control')) {
     return next();
   }
   authenticate(req, res, next);
@@ -843,15 +843,15 @@ router.patch('/api-status/:deviceId', async (req, res, next) => {
   }
 });
 
-// @route   POST /api/devices/heartbeat/:deviceId  
-// @desc    Receive heartbeat from edge server
-// @access  Public (called by edge servers)
-router.post('/heartbeat/:deviceId', iotRateLimit, async (req, res, next) => {
+// @route   POST /api/devices/heartbeat/:deviceKey  
+// @desc    Receive heartbeat from IoT device or edge server
+// @access  Public (called by devices)
+router.post('/heartbeat/:deviceKey', iotRateLimit, async (req, res, next) => {
   try {
-    const { deviceId } = req.params;
+    const { deviceKey } = req.params;
     const { cpu_usage, ram_usage, temperature, timestamp } = req.body;
 
-    const device = await Device.findOne({ device_key: deviceId });
+    const device = await Device.findOne({ device_key: deviceKey });
     if (!device) {
       return res.status(404).json({ 
         success: false, 
@@ -860,11 +860,14 @@ router.post('/heartbeat/:deviceId', iotRateLimit, async (req, res, next) => {
     }
 
     // Update device metrics
-    device.cpu_usage = cpu_usage || 0;
-    device.ram_usage = ram_usage || 0; 
-    device.temperature = temperature || 0;
+    device.cpu_usage = cpu_usage || device.cpu_usage || 0;
+    device.ram_usage = ram_usage || device.ram_usage || 0; 
+    device.temperature = temperature || device.temperature || 0;
     device.last_seen = new Date();
     device.status = 'online';
+    if (device.category === 'IoT') {
+      device.api_status = 'connected';
+    }
 
     await device.save();
 
@@ -873,8 +876,8 @@ router.post('/heartbeat/:deviceId', iotRateLimit, async (req, res, next) => {
       device_id: device._id,
       action_type: 'heartbeat',
       status: 'success',
-      log_output: `CPU: ${cpu_usage}%, RAM: ${ram_usage}%, Temp: ${temperature}°C`,
-      triggered_by: 'edge_server'
+      log_output: `CPU: ${cpu_usage || 0}%, RAM: ${ram_usage || 0}%, Temp: ${temperature || 0}°C`,
+      triggered_by: device.category === 'IoT' ? 'iot_device' : 'edge_server'
     });
 
     res.json({ 
@@ -924,55 +927,12 @@ router.patch('/api-status/:deviceKey', async (req, res, next) => {
   }
 });
 
-// @route   POST /api/devices/heartbeat/:deviceKey
-// @desc    Receive heartbeat from edge server with system stats
-// @access  Public (edge server endpoint)
-router.post('/heartbeat/:deviceKey', async (req, res, next) => {
-  try {
-    const { deviceKey } = req.params;
-    const { cpu_usage, ram_usage, temperature, timestamp } = req.body;
 
-    const device = await Device.findOne({ device_key: deviceKey });
-    
-    if (!device) {
-      return res.status(404).json({
-        success: false,
-        error: 'Device not found'
-      });
-    }
 
-    // Update device metrics
-    device.cpu_usage = cpu_usage || device.cpu_usage;
-    device.ram_usage = ram_usage || device.ram_usage;
-    device.temperature = temperature || device.temperature;
-    device.last_seen = new Date();
-    device.status = 'online';
-    device.api_status = 'connected';
-    
-    await device.save();
-
-    // Optional: Log activity for monitoring
-    await DeviceActivity.create({
-      device_id: device._id,
-      action_type: 'heartbeat',
-      status: 'success',
-      log_output: `Heartbeat received - CPU: ${cpu_usage}%, RAM: ${ram_usage}%, Temp: ${temperature}°C`,
-      triggered_by: 'edge_server'
-    });
-
-    res.json({
-      success: true,
-      message: 'Heartbeat received'
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// @route   POST /api/devices/:id/temperature-control
+// @route   POST /api/devices/:deviceKey/temperature-control
 // @desc    Receive temperature data from IoT device
 // @access  Public (no auth - called by ESP32)
-router.post('/:id/temperature-control', async (req, res, next) => {
+router.post('/:deviceKey/temperature-control', iotRateLimit, async (req, res, next) => {
   try {
     const { temperature, unit } = req.body;
     
@@ -983,7 +943,7 @@ router.post('/:id/temperature-control', async (req, res, next) => {
       });
     }
 
-    const device = await Device.findById(req.params.id);
+    const device = await Device.findOne({ device_key: req.params.deviceKey });
     if (!device) {
       return res.status(404).json({
         success: false,
@@ -1015,10 +975,10 @@ router.post('/:id/temperature-control', async (req, res, next) => {
   }
 });
 
-// @route   POST /api/devices/:id/humidity-control
+// @route   POST /api/devices/:deviceKey/humidity-control
 // @desc    Receive humidity data from IoT device
 // @access  Public (no auth - called by ESP32)
-router.post('/:id/humidity-control', async (req, res, next) => {
+router.post('/:deviceKey/humidity-control', iotRateLimit, async (req, res, next) => {
   try {
     const { humidity, unit } = req.body;
     
@@ -1029,7 +989,7 @@ router.post('/:id/humidity-control', async (req, res, next) => {
       });
     }
 
-    const device = await Device.findById(req.params.id);
+    const device = await Device.findOne({ device_key: req.params.deviceKey });
     if (!device) {
       return res.status(404).json({
         success: false,
@@ -1107,10 +1067,10 @@ router.post('/:deviceKey/led-control', iotRateLimit, async (req, res, next) => {
   }
 });
 
-// @route   POST /api/devices/:id/gps-control
+// @route   POST /api/devices/:deviceKey/gps-control
 // @desc    Receive GPS data from IoT device
 // @access  Public (no auth - called by ESP32)
-router.post('/:id/gps-control', async (req, res, next) => {
+router.post('/:deviceKey/gps-control', iotRateLimit, async (req, res, next) => {
   try {
     const { latitude, longitude, altitude, accuracy } = req.body;
     
@@ -1121,7 +1081,7 @@ router.post('/:id/gps-control', async (req, res, next) => {
       });
     }
 
-    const device = await Device.findById(req.params.id);
+    const device = await Device.findOne({ device_key: req.params.deviceKey });
     if (!device) {
       return res.status(404).json({
         success: false,
