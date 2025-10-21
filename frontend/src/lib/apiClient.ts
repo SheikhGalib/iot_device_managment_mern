@@ -100,6 +100,50 @@ class ApiClient {
   getToken(): string | null {
     return this.token;
   }
+
+  // Generic HTTP methods
+  async get(endpoint: string, options: { params?: Record<string, any> } = {}): Promise<any> {
+    let url = endpoint;
+    if (options.params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(options.params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      const queryString = searchParams.toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
+    }
+
+    return this.makeRequest(url, { method: 'GET' });
+  }
+
+  async post(endpoint: string, data?: any): Promise<any> {
+    return this.makeRequest(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put(endpoint: string, data?: any): Promise<any> {
+    return this.makeRequest(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async patch(endpoint: string, data?: any): Promise<any> {
+    return this.makeRequest(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete(endpoint: string): Promise<any> {
+    return this.makeRequest(endpoint, { method: 'DELETE' });
+  }
 }
 
 export const apiClient = new ApiClient();

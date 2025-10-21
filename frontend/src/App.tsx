@@ -15,6 +15,8 @@ import DeviceDetail from "./pages/dashboard/DeviceDetail";
 import IoTDevices from "./pages/dashboard/IoTDevices";
 import IoTDeviceDetail from "./pages/dashboard/IoTDeviceDetail";
 import Deployments from "./pages/dashboard/Deployments";
+import Workspaces from "./pages/dashboard/Workspaces";
+import WorkspaceEditorPage from "./pages/dashboard/WorkspaceEditorPage";
 import Settings from "./pages/dashboard/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -42,6 +44,8 @@ const App = () => (
                 <Route path="iot-devices" element={<IoTDevices />} />
                 <Route path="iot-device/:id" element={<IoTDeviceDetail />} />
                 <Route path="deployments" element={<Deployments />} />
+                <Route path="workspaces" element={<Workspaces />} />
+                <Route path="workspaces/:workspaceId" element={<WorkspaceEditorPage />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               <Route path="*" element={<NotFound />} />

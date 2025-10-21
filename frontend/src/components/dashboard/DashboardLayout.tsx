@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Server, Radio, Settings, User, Bell, Sun, Moon, Menu, Package, LogOut } from "lucide-react";
+import { Server, Radio, Settings, User, Bell, Sun, Moon, Menu, Package, LogOut, Layout } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/ThemeProvider";
@@ -41,6 +41,7 @@ const DashboardLayout = () => {
   const navItems = [
     { icon: Server, label: "Edge Devices", path: "/dashboard" },
     { icon: Radio, label: "IoT Devices", path: "/dashboard/iot-devices" },
+    { icon: Layout, label: "IoT Workspaces", path: "/dashboard/workspaces" },
     { icon: Package, label: "Deployments", path: "/dashboard/deployments" },
     { icon: Settings, label: "Settings", path: "/dashboard/settings" },
   ];

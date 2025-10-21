@@ -53,6 +53,8 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/devices', require('./routes/devices'));
+app.use('/api/workspaces', require('./routes/workspaces'));
+app.use('/api/widgets', require('./routes/widgets'));
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
