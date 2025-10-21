@@ -10,6 +10,132 @@ const router = express.Router();
 // Apply authentication to all widget routes
 router.use(authenticate);
 
+// @route   GET /api/widgets/types
+// @desc    Get available widget types with their configurations
+// @access  Private
+router.get('/types', async (req, res, next) => {
+  try {
+    const widgetTypes = [
+      {
+        type: 'temperature',
+        name: 'Temperature Sensor',
+        description: 'Display temperature readings with configurable units',
+        icon: 'thermometer',
+        defaultSettings: {
+          unit: '°C',
+          format: 'number',
+          precision: 1,
+          color: '#ef4444'
+        },
+        defaultLayout: { w: 3, h: 4, minW: 2, minH: 3 }
+      },
+      {
+        type: 'humidity',
+        name: 'Humidity Sensor',
+        description: 'Display humidity percentage readings',
+        icon: 'droplets',
+        defaultSettings: {
+          unit: '%',
+          format: 'number',
+          precision: 1,
+          color: '#3b82f6'
+        },
+        defaultLayout: { w: 3, h: 4, minW: 2, minH: 3 }
+      },
+      {
+        type: 'led',
+        name: 'LED Control',
+        description: 'Control and monitor LED status',
+        icon: 'lightbulb',
+        defaultSettings: {
+          format: 'boolean',
+          color: '#22c55e'
+        },
+        defaultLayout: { w: 2, h: 3, minW: 2, minH: 2 }
+      },
+      {
+        type: 'gps',
+        name: 'GPS Location',
+        description: 'Display GPS coordinates and location',
+        icon: 'map-pin',
+        defaultSettings: {
+          format: 'json',
+          precision: 6,
+          color: '#8b5cf6'
+        },
+        defaultLayout: { w: 4, h: 5, minW: 3, minH: 4 }
+      },
+      {
+        type: 'camera',
+        name: 'Camera Feed',
+        description: 'Display camera feed or images',
+        icon: 'camera',
+        defaultSettings: {
+          format: 'text',
+          refreshInterval: 5000,
+          color: '#f59e0b'
+        },
+        defaultLayout: { w: 6, h: 6, minW: 4, minH: 4 }
+      },
+      {
+        type: 'chart',
+        name: 'Data Chart',
+        description: 'Display historical data as charts',
+        icon: 'bar-chart-3',
+        defaultSettings: {
+          format: 'number',
+          showHistory: true,
+          historyDuration: 3600,
+          color: '#06b6d4'
+        },
+        defaultLayout: { w: 6, h: 5, minW: 4, minH: 4 }
+      },
+      {
+        type: 'gauge',
+        name: 'Gauge Display',
+        description: 'Display values with gauge visualization',
+        icon: 'gauge',
+        defaultSettings: {
+          format: 'number',
+          minValue: 0,
+          maxValue: 100,
+          color: '#ec4899'
+        },
+        defaultLayout: { w: 4, h: 4, minW: 3, minH: 3 }
+      },
+      {
+        type: 'text',
+        name: 'Text Display',
+        description: 'Display text or simple values',
+        icon: 'type',
+        defaultSettings: {
+          format: 'text',
+          color: '#6b7280'
+        },
+        defaultLayout: { w: 3, h: 2, minW: 2, minH: 1 }
+      },
+      {
+        type: 'custom',
+        name: 'Custom Widget',
+        description: 'Custom widget with flexible configuration',
+        icon: 'puzzle',
+        defaultSettings: {
+          format: 'json',
+          color: '#84cc16'
+        },
+        defaultLayout: { w: 3, h: 4, minW: 2, minH: 2 }
+      }
+    ];
+
+    res.json({
+      success: true,
+      data: widgetTypes
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   PUT /api/widgets/:id
 // @desc    Update widget settings and metadata
 // @access  Private
@@ -307,132 +433,6 @@ router.put('/:id/position', async (req, res, next) => {
         id: widget._id,
         layout: widget.layout
       }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// @route   GET /api/widgets/types
-// @desc    Get available widget types with their configurations
-// @access  Private
-router.get('/types', async (req, res, next) => {
-  try {
-    const widgetTypes = [
-      {
-        type: 'temperature',
-        name: 'Temperature Sensor',
-        description: 'Display temperature readings with configurable units',
-        icon: 'thermometer',
-        defaultSettings: {
-          unit: '°C',
-          format: 'number',
-          precision: 1,
-          color: '#ef4444'
-        },
-        defaultLayout: { w: 3, h: 4, minW: 2, minH: 3 }
-      },
-      {
-        type: 'humidity',
-        name: 'Humidity Sensor',
-        description: 'Display humidity percentage readings',
-        icon: 'droplets',
-        defaultSettings: {
-          unit: '%',
-          format: 'number',
-          precision: 1,
-          color: '#3b82f6'
-        },
-        defaultLayout: { w: 3, h: 4, minW: 2, minH: 3 }
-      },
-      {
-        type: 'led',
-        name: 'LED Control',
-        description: 'Control and monitor LED status',
-        icon: 'lightbulb',
-        defaultSettings: {
-          format: 'boolean',
-          color: '#22c55e'
-        },
-        defaultLayout: { w: 2, h: 3, minW: 2, minH: 2 }
-      },
-      {
-        type: 'gps',
-        name: 'GPS Location',
-        description: 'Display GPS coordinates and location',
-        icon: 'map-pin',
-        defaultSettings: {
-          format: 'json',
-          precision: 6,
-          color: '#8b5cf6'
-        },
-        defaultLayout: { w: 4, h: 5, minW: 3, minH: 4 }
-      },
-      {
-        type: 'camera',
-        name: 'Camera Feed',
-        description: 'Display camera feed or images',
-        icon: 'camera',
-        defaultSettings: {
-          format: 'text',
-          refreshInterval: 5000,
-          color: '#f59e0b'
-        },
-        defaultLayout: { w: 6, h: 6, minW: 4, minH: 4 }
-      },
-      {
-        type: 'chart',
-        name: 'Data Chart',
-        description: 'Display historical data as charts',
-        icon: 'bar-chart-3',
-        defaultSettings: {
-          format: 'number',
-          showHistory: true,
-          historyDuration: 3600,
-          color: '#06b6d4'
-        },
-        defaultLayout: { w: 6, h: 5, minW: 4, minH: 4 }
-      },
-      {
-        type: 'gauge',
-        name: 'Gauge Display',
-        description: 'Display values with gauge visualization',
-        icon: 'gauge',
-        defaultSettings: {
-          format: 'number',
-          minValue: 0,
-          maxValue: 100,
-          color: '#ec4899'
-        },
-        defaultLayout: { w: 4, h: 4, minW: 3, minH: 3 }
-      },
-      {
-        type: 'text',
-        name: 'Text Display',
-        description: 'Display text or simple values',
-        icon: 'type',
-        defaultSettings: {
-          format: 'text',
-          color: '#6b7280'
-        },
-        defaultLayout: { w: 3, h: 2, minW: 2, minH: 1 }
-      },
-      {
-        type: 'custom',
-        name: 'Custom Widget',
-        description: 'Custom widget with flexible configuration',
-        icon: 'puzzle',
-        defaultSettings: {
-          format: 'json',
-          color: '#84cc16'
-        },
-        defaultLayout: { w: 3, h: 4, minW: 2, minH: 2 }
-      }
-    ];
-
-    res.json({
-      success: true,
-      data: widgetTypes
     });
   } catch (error) {
     next(error);
