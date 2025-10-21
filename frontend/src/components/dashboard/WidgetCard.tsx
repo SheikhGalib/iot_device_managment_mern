@@ -296,7 +296,7 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
     isConnected, 
     refresh 
   } = useDeviceData({
-    deviceId: widget.deviceId,
+    deviceId: widget.deviceId ? String(widget.deviceId) : undefined,
     dataPath: widget.dataPath,
     refreshInterval: widget.settings.refreshInterval || 5000,
     enabled: !!widget.deviceId && widget.isActive
@@ -383,7 +383,7 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
         {widget.deviceId && (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center space-x-1">
-              <span>Device: {device?.name || widget.deviceId.slice(-8)}</span>
+              <span>Device: {device?.name || String(widget.deviceId).slice(-8)}</span>
               {isConnected ? (
                 <Wifi className="h-3 w-3 text-green-500" />
               ) : (

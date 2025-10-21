@@ -117,10 +117,6 @@ router.get('/:id', async (req, res, next) => {
       user: req.user._id
     }).populate({
       path: 'widgets',
-      populate: {
-        path: 'deviceId',
-        select: 'name type status ip_address'
-      },
       options: { sort: { order: 1, createdAt: 1 } }
     }).lean();
 
@@ -134,9 +130,10 @@ router.get('/:id', async (req, res, next) => {
 
     logger.info(`Successfully found workspace ${workspace._id} with ${workspace.widgets?.length || 0} widgets`);
 
-    // Ensure each widget has proper layout.i set to widget._id string
+    // Ensure each widget has proper layout.i set to widget._id string and deviceId as string
     workspace.widgets = workspace.widgets.map(widget => ({
       ...widget,
+      deviceId: widget.deviceId ? widget.deviceId.toString() : null,
       layout: {
         ...widget.layout,
         i: widget._id.toString()
@@ -333,14 +330,15 @@ router.post('/:id/widgets', async (req, res, next) => {
     workspace.widgets.push(widget._id);
     await workspace.save();
 
-    // Populate device info for response
-    await widget.populate('deviceId', 'name type status ip_address');
-
     logger.info(`Widget added: ${widget.title} (${widget.type}) to workspace ${workspace.name} by ${req.user.username}`);
+
+    // Convert to plain object and ensure deviceId is string
+    const widgetResponse = widget.toObject();
+    widgetResponse.deviceId = widget.deviceId ? widget.deviceId.toString() : null;
 
     res.status(201).json({
       success: true,
-      data: widget
+      data: widgetResponse
     });
   } catch (error) {
     next(error);
