@@ -15,6 +15,23 @@ import { Upload } from "lucide-react";
 import { Device, deviceApi } from "@/lib/deviceApi";
 import { toast } from "sonner";
 
+interface DeploymentResponse {
+  success: boolean;
+  message: string;
+  data: {
+    deployments: Array<{
+      deviceId: string;
+      deviceName: string;
+      activityId?: string;
+      status: string;
+      error?: string;
+    }>;
+    successCount: number;
+    failedCount: number;
+  };
+  error?: string;
+}
+
 interface DeploymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -83,18 +100,18 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
         selectedDevices,
         commands.trim() || undefined,
         file?.name
-      );
+      ) as unknown as DeploymentResponse;
 
-      if (response.data.success) {
+      if (response.success) {
         toast.success(
-          `Deployment started for ${response.data.data.successCount} device(s): ${selectedDeviceNames.join(', ')}`
+          `Deployment started for ${response.data.successCount} device(s): ${selectedDeviceNames.join(', ')}`
         );
         
-        if (response.data.data.failedCount > 0) {
-          toast.warning(`${response.data.data.failedCount} device(s) failed to start deployment`);
+        if (response.data.failedCount > 0) {
+          toast.warning(`${response.data.failedCount} device(s) failed to start deployment`);
         }
       } else {
-        throw new Error(response.data.error || 'Deployment failed');
+        throw new Error(response.error || 'Deployment failed');
       }
 
       onOpenChange(false);
@@ -107,7 +124,21 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
       
     } catch (error: any) {
       console.error('Deployment error:', error);
-      toast.error(error.message || 'Failed to start deployment');
+      
+      // Handle different types of errors
+      let errorMessage = 'Failed to start deployment';
+      
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+        errorMessage = 'Cannot connect to backend server. Please make sure the backend is running on port 3001.';
+      } else if (error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.error) {
+        errorMessage = error.error;
+      }
+      
+      toast.error(errorMessage);
     }
   };
 
