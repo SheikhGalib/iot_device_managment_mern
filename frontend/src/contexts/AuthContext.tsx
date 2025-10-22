@@ -19,7 +19,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Check if user is logged in on app start
     const currentUser = apiClient.getCurrentUser();
-    setUser(currentUser);
+    const token = apiClient.getToken();
+    
+    // Only set user if both user data and token exist
+    if (currentUser && token) {
+      setUser(currentUser);
+    } else {
+      // Clear any invalid state
+      apiClient.logout();
+      setUser(null);
+    }
     setLoading(false);
   }, []);
 

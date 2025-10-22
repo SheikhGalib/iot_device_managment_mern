@@ -5,31 +5,44 @@ import { Label } from "@/components/ui/label";
 import { Server } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { apiClient } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 const SignIn = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login, isAuthenticated, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // Check if user is already logged in
-    if (apiClient.isAuthenticated()) {
+    if (!authLoading && isAuthenticated) {
       navigate("/dashboard", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, isAuthenticated, authLoading]);
+
+  // Show loading screen while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const response = await apiClient.login(email, password);
+      const success = await login(email, password);
 
-      if (response.success) {
+      if (success) {
         toast({
           title: "Success!",
           description: "Signed in successfully",
@@ -38,7 +51,7 @@ const SignIn = () => {
       } else {
         toast({  
           title: "Error signing in",
-          description: response.error || "Login failed",
+          description: "Login failed",
           variant: "destructive",
         });
       }
