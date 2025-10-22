@@ -227,8 +227,8 @@ const renderWidgetContent = (widget: Widget, currentValue: any, device: any, isC
         <div className="flex flex-col items-center justify-center h-full space-y-2">
           <div className="flex items-center space-x-2">
             <IconComponent 
-              className="h-8 w-8" 
-              style={{ color: getThresholdIconColor() }}
+              className="h-8 w-8"
+              style={{ stroke: getThresholdIconColor() }}
             />
             {StatusIcon && <StatusIcon className={`h-4 w-4 ${statusColor}`} />}
           </div>
@@ -247,7 +247,7 @@ const renderWidgetContent = (widget: Widget, currentValue: any, device: any, isC
                 className="w-2 h-2 rounded-full" 
                 style={{ backgroundColor: getThresholdIconColor() }}
               />
-              <span className={statusColor.replace('text-', 'text-opacity-70 ')}>
+              <span className={`${statusColor} opacity-70`}>
                 {(() => {
                   const num = typeof currentValue === 'number' ? currentValue : parseFloat(currentValue);
                   const thresholds = widget.type === 'temperature' ? { warning: 35, critical: 40 } : { warning: 50, critical: 60 };

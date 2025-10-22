@@ -470,7 +470,7 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
                   >
                     <IconComponent 
                       className="h-4 w-4" 
-                      style={{ color: config.color }}
+                      style={{ stroke: config.color }}
                     />
                     <span className="text-sm">{config.name}</span>
 
