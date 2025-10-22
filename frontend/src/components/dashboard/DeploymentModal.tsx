@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,19 +12,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Upload } from "lucide-react";
-import { mockEdgeDevices } from "@/lib/mockData";
+import { Device } from "@/lib/deviceApi";
 import { toast } from "sonner";
 
 interface DeploymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  devices: Device[];
 }
 
-const DeploymentModal = ({ open, onOpenChange }: DeploymentModalProps) => {
+const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) => {
   const navigate = useNavigate();
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [commands, setCommands] = useState("");
   const [file, setFile] = useState<File | null>(null);
+
+  // Clear selections when modal opens/closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedDevices([]);
+      setCommands("");
+      setFile(null);
+    }
+  }, [open]);
 
   const handleDeviceToggle = (deviceId: string) => {
     setSelectedDevices((prev) =>
@@ -39,7 +49,18 @@ const DeploymentModal = ({ open, onOpenChange }: DeploymentModalProps) => {
       toast.error("Please select at least one device");
       return;
     }
-    toast.success(`Deploying to ${selectedDevices.length} device(s)`);
+    
+    if (!commands.trim() && !file) {
+      toast.error("Please provide commands or upload a file");
+      return;
+    }
+
+    // Get selected device names for toast message
+    const selectedDeviceNames = devices
+      .filter(device => selectedDevices.includes(device._id))
+      .map(device => device.name);
+    
+    toast.success(`Deploying to ${selectedDeviceNames.length} device(s): ${selectedDeviceNames.join(', ')}`);
     onOpenChange(false);
     setSelectedDevices([]);
     setCommands("");
@@ -55,7 +76,8 @@ const DeploymentModal = ({ open, onOpenChange }: DeploymentModalProps) => {
         <DialogHeader>
           <DialogTitle>Deploy Code to Edge Devices</DialogTitle>
           <DialogDescription>
-            Select devices and upload your code or provide custom commands
+            Select edge devices and upload your code or provide custom commands to deploy
+            {devices.length > 0 ? ` (${devices.length} device${devices.length === 1 ? '' : 's'} available)` : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -63,26 +85,39 @@ const DeploymentModal = ({ open, onOpenChange }: DeploymentModalProps) => {
           {/* Device Selection */}
           <div className="space-y-4">
             <Label>Select Devices</Label>
-            <div className="grid grid-cols-2 gap-4">
-              {mockEdgeDevices.map((device) => (
-                <div key={device.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={device.id}
-                    checked={selectedDevices.includes(device.id)}
-                    onCheckedChange={() => handleDeviceToggle(device.id)}
-                  />
-                  <label
-                    htmlFor={device.id}
-                    className="text-sm cursor-pointer flex-1"
-                  >
-                    {device.name}
-                    <span className="text-muted-foreground ml-2">
-                      ({device.mac})
-                    </span>
-                  </label>
-                </div>
-              ))}
-            </div>
+            {devices.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No edge devices found.</p>
+                <p className="text-xs mt-1">Register edge devices first to deploy code.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {devices.map((device) => (
+                  <div key={device._id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={device._id}
+                      checked={selectedDevices.includes(device._id)}
+                      onCheckedChange={() => handleDeviceToggle(device._id)}
+                    />
+                    <label
+                      htmlFor={device._id}
+                      className="text-sm cursor-pointer flex-1"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                        {device.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {device.type} • {device.ip_address || 'No IP'}
+                        {device.mac_address && (
+                          <span className="ml-1">• {device.mac_address}</span>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* File Upload */}
@@ -122,7 +157,12 @@ const DeploymentModal = ({ open, onOpenChange }: DeploymentModalProps) => {
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={handleDeploy}>Deploy</Button>
+            <Button 
+              onClick={handleDeploy}
+              disabled={devices.length === 0 || selectedDevices.length === 0}
+            >
+              Deploy {selectedDevices.length > 0 && `(${selectedDevices.length})`}
+            </Button>
           </div>
         </div>
       </DialogContent>

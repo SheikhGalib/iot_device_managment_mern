@@ -297,6 +297,7 @@ const EdgeDevices = () => {
       <DeploymentModal
         open={isDeploymentModalOpen}
         onOpenChange={setIsDeploymentModalOpen}
+        devices={filteredDevices}
       />
     </div>
   );
