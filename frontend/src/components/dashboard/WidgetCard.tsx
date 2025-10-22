@@ -270,7 +270,7 @@ const getPlaceholderValue = (widget: Widget) => {
     case 'led':
       return false; // Default to OFF state
     case 'gps':
-      return null; // Show "No Location" instead of fake coordinates
+      return { lat: 'No Data', lng: 'No Data', address: null }; // Show "No Data" instead of fake coordinates
     case 'gauge':
       return 0; // Default to 0
     case 'text':
@@ -294,32 +294,50 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
   } = useDeviceData({
     deviceId: widget.deviceId ? String(widget.deviceId) : undefined,
     dataPath: widget.dataPath,
-    refreshInterval: widget.settings.refreshInterval || 5000,
+    refreshInterval: widget.settings.refreshInterval || 3000, // Reduced to 3 seconds for more responsive updates
     enabled: !!widget.deviceId && widget.isActive
   });
 
   // Determine which value to use - real device data or placeholder data
   const getCurrentValue = () => {
     if (!widget.deviceId || !deviceData) {
+      console.log(`[WidgetCard] No device data for widget ${widget.title} (type: ${widget.type}, deviceId: ${widget.deviceId}, dataPath: ${widget.dataPath})`);
       return placeholderValue; // Use placeholder data if no device linked or no real data
     }
+
+    console.log(`[WidgetCard] Processing data for widget ${widget.title}:`, {
+      type: widget.type,
+      deviceId: widget.deviceId,
+      dataPath: widget.dataPath,
+      deviceData: deviceData,
+      isConnected: isConnected
+    });
 
     // Extract the appropriate value based on widget type and device data
     switch (widget.type) {
       case 'temperature':
-        return deviceData.temperature ?? placeholderValue;
+        const tempValue = deviceData.temperature ?? placeholderValue;
+        console.log(`[WidgetCard] Temperature value:`, tempValue);
+        return tempValue;
       case 'humidity':
-        return deviceData.humidity ?? placeholderValue;
+        const humValue = deviceData.humidity ?? placeholderValue;
+        console.log(`[WidgetCard] Humidity value:`, humValue);
+        return humValue;
       case 'led':
-        return deviceData.led_state ?? placeholderValue;
+        const ledValue = deviceData.led_state ?? placeholderValue;
+        console.log(`[WidgetCard] LED value:`, ledValue);
+        return ledValue;
       case 'gps':
         if (deviceData.latitude !== undefined && deviceData.longitude !== undefined) {
-          return {
-            lat: deviceData.latitude.toFixed(6),
-            lng: deviceData.longitude.toFixed(6),
+          const gpsValue = {
+            lat: Number(deviceData.latitude).toFixed(6),
+            lng: Number(deviceData.longitude).toFixed(6),
             address: "Real GPS Location"
           };
+          console.log(`[WidgetCard] GPS value:`, gpsValue);
+          return gpsValue;
         }
+        console.log(`[WidgetCard] GPS data incomplete:`, { latitude: deviceData.latitude, longitude: deviceData.longitude });
         return placeholderValue;
       default:
         return placeholderValue;
@@ -386,7 +404,15 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
                 <WifiOff className="h-3 w-3 text-gray-400" />
               )}
             </div>
-            {loading && <RefreshCw className="h-3 w-3 animate-spin" />}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-4 w-4 p-0"
+              onClick={(e) => { e.stopPropagation(); refresh(); }}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
           </div>
         )}
       </CardHeader>

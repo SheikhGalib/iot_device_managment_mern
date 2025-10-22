@@ -8,8 +8,8 @@
 #define HUMIDITY_SENSOR_PIN A1  // Analog pin for humidity sensor
 
 // WiFi Configuration
-const char *ssid = "temp_network";
-const char *password = "12345678";
+const char *ssid = "YOUR_WIFI_SSID";
+const char *password = "YOUR_WIFI_PASSWORD";
 
 // Backend Configuration
 const char *serverBase = "http://192.168.137.1:3001/api/devices";

@@ -16,6 +16,8 @@ export interface Device {
   cpu_usage?: number;
   ram_usage?: number;
   temperature?: number;
+  signal_strength?: number;
+  uptime?: number;
   deployment_status?: 'idle' | 'running' | 'error';
   active_sessions?: number;
   // IoT-specific fields

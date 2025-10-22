@@ -109,6 +109,7 @@ const char *deviceKey = "${device.device_key}";
 // Timing variables
 unsigned long previousMillis = 0;
 const long interval = 15000; // Send data every 15 seconds
+unsigned long startTime = 0; // Track device start time for uptime calculation
 
 // Demo data variables
 float temperature = 25.0;
@@ -120,6 +121,9 @@ bool ledState = false;
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
+  
+  // Record start time for uptime calculation
+  startTime = millis();
   
   WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi...");
@@ -182,9 +186,15 @@ void sendHeartbeat() {
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     
+    // Calculate uptime in seconds
+    unsigned long uptimeSeconds = (millis() - startTime) / 1000;
+    
+    // Get WiFi signal strength (RSSI in dBm, typically -30 to -100)
+    long signalStrength = WiFi.RSSI();
+    
     JsonDocument doc;
-    doc["cpu_usage"] = random(10, 30);
-    doc["ram_usage"] = random(20, 50);
+    doc["signal_strength"] = signalStrength;
+    doc["uptime"] = uptimeSeconds;
     doc["temperature"] = temperature;
     doc["timestamp"] = millis();
     
@@ -192,7 +202,8 @@ void sendHeartbeat() {
     serializeJson(doc, requestBody);
     
     int httpResponseCode = http.POST(requestBody);
-    Serial.printf("Heartbeat: %d\\n", httpResponseCode);
+    Serial.printf("Heartbeat: Signal: %ld dBm, Uptime: %lu s, Response: %d\\n", 
+                  signalStrength, uptimeSeconds, httpResponseCode);
     http.end();
   }
 }

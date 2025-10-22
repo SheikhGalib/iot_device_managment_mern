@@ -110,6 +110,17 @@ const deviceSchema = new mongoose.Schema({
     min: 0,
     max: 200
   },
+  signal_strength: {
+    type: Number,
+    default: 0,
+    min: -100,
+    max: 0
+  },
+  uptime: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   active_sessions: {
     type: Number,
     default: 0,

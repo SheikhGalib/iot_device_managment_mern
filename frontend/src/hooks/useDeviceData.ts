@@ -48,60 +48,94 @@ export function useDeviceData({
         const deviceResponse = await deviceApi.getDevice(deviceId);
         setDevice(deviceResponse.data);
         
-        // Extract data based on dataPath
-        if (deviceResponse.data.current_data && dataPath) {
+        console.log(`[useDeviceData] Fetching data for device ${deviceId}, dataPath: ${dataPath}`, {
+          deviceName: deviceResponse.data.name,
+          currentData: deviceResponse.data.current_data,
+          lastSeen: deviceResponse.data.last_seen,
+          status: deviceResponse.data.status
+        });
+        
+        // Extract data based on dataPath or directly from current_data
+        if (deviceResponse.data.current_data) {
           const currentData = deviceResponse.data.current_data;
           
-          // Map API paths to data
-          switch (dataPath) {
-            case 'temperature-control':
-              if (currentData.temperature !== undefined) {
+          if (dataPath) {
+            // Map API paths to data (extract nested values)
+            switch (dataPath) {
+              case 'temperature-control':
+                if (currentData.temperature?.value !== undefined) {
+                  setData({
+                    temperature: currentData.temperature.value,
+                    timestamp: currentData.temperature.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              case 'humidity-control':
+                if (currentData.humidity?.value !== undefined) {
+                  setData({
+                    humidity: currentData.humidity.value,
+                    timestamp: currentData.humidity.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              case 'led-control':
+                if (currentData.led?.state !== undefined) {
+                  setData({
+                    led_state: currentData.led.state,
+                    brightness: currentData.led.brightness || 100,
+                    timestamp: currentData.led.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              case 'gps-control':
+                if (currentData.gps?.latitude !== undefined && currentData.gps?.longitude !== undefined) {
+                  setData({
+                    latitude: currentData.gps.latitude,
+                    longitude: currentData.gps.longitude,
+                    altitude: currentData.gps.altitude,
+                    accuracy: currentData.gps.accuracy,
+                    timestamp: currentData.gps.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              default:
+                // Generic data extraction
                 setData({
-                  temperature: currentData.temperature,
+                  ...currentData,
                   timestamp: deviceResponse.data.updatedAt
                 });
-              }
-              break;
-              
-            case 'humidity-control':
-              if (currentData.humidity !== undefined) {
-                setData({
-                  humidity: currentData.humidity,
-                  timestamp: deviceResponse.data.updatedAt
-                });
-              }
-              break;
-              
-            case 'led-control':
-              if (currentData.led_state !== undefined) {
-                setData({
-                  led_state: currentData.led_state,
-                  brightness: currentData.brightness || 100,
-                  timestamp: deviceResponse.data.updatedAt
-                });
-              }
-              break;
-              
-            case 'gps-control':
-              if (currentData.latitude !== undefined && currentData.longitude !== undefined) {
-                setData({
-                  latitude: currentData.latitude,
-                  longitude: currentData.longitude,
-                  altitude: currentData.altitude,
-                  accuracy: currentData.accuracy,
-                  timestamp: deviceResponse.data.updatedAt
-                });
-              }
-              break;
-              
-            default:
-              // Generic data extraction
-              setData({
-                ...currentData,
-                timestamp: deviceResponse.data.updatedAt
-              });
+            }
+          } else {
+            // No specific dataPath, extract all available data
+            const extractedData: DeviceData = {};
+            
+            if (currentData.temperature?.value !== undefined) {
+              extractedData.temperature = currentData.temperature.value;
+            }
+            if (currentData.humidity?.value !== undefined) {
+              extractedData.humidity = currentData.humidity.value;
+            }
+            if (currentData.led?.state !== undefined) {
+              extractedData.led_state = currentData.led.state;
+              extractedData.brightness = currentData.led.brightness || 100;
+            }
+            if (currentData.gps?.latitude !== undefined && currentData.gps?.longitude !== undefined) {
+              extractedData.latitude = currentData.gps.latitude;
+              extractedData.longitude = currentData.gps.longitude;
+              extractedData.altitude = currentData.gps.altitude;
+              extractedData.accuracy = currentData.gps.accuracy;
+            }
+            
+            extractedData.timestamp = deviceResponse.data.updatedAt;
+            setData(extractedData);
           }
         }
+        
+        console.log(`[useDeviceData] Final extracted data:`, data ? data : 'No data extracted');
         
       } catch (err: any) {
         console.error('Failed to fetch device data:', err);
@@ -128,12 +162,91 @@ export function useDeviceData({
     };
   }, [deviceId, dataPath, refreshInterval, enabled]);
 
-  const refresh = () => {
+  const refresh = async () => {
     if (deviceId && enabled) {
       setLoading(true);
-      // Trigger a manual refresh by clearing and resetting the effect
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      
+      try {
+        const deviceResponse = await deviceApi.getDevice(deviceId);
+        setDevice(deviceResponse.data);
+        
+        // Extract data the same way as in the main effect
+        if (deviceResponse.data.current_data) {
+          const currentData = deviceResponse.data.current_data;
+          
+          if (dataPath) {
+            // Same extraction logic as above
+            switch (dataPath) {
+              case 'temperature-control':
+                if (currentData.temperature?.value !== undefined) {
+                  setData({
+                    temperature: currentData.temperature.value,
+                    timestamp: currentData.temperature.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              case 'humidity-control':
+                if (currentData.humidity?.value !== undefined) {
+                  setData({
+                    humidity: currentData.humidity.value,
+                    timestamp: currentData.humidity.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              case 'led-control':
+                if (currentData.led?.state !== undefined) {
+                  setData({
+                    led_state: currentData.led.state,
+                    brightness: currentData.led.brightness || 100,
+                    timestamp: currentData.led.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+                
+              case 'gps-control':
+                if (currentData.gps?.latitude !== undefined && currentData.gps?.longitude !== undefined) {
+                  setData({
+                    latitude: currentData.gps.latitude,
+                    longitude: currentData.gps.longitude,
+                    altitude: currentData.gps.altitude,
+                    accuracy: currentData.gps.accuracy,
+                    timestamp: currentData.gps.timestamp || deviceResponse.data.updatedAt
+                  });
+                }
+                break;
+            }
+          } else {
+            // Extract all data if no specific dataPath
+            const extractedData: DeviceData = {};
+            
+            if (currentData.temperature?.value !== undefined) {
+              extractedData.temperature = currentData.temperature.value;
+            }
+            if (currentData.humidity?.value !== undefined) {
+              extractedData.humidity = currentData.humidity.value;
+            }
+            if (currentData.led?.state !== undefined) {
+              extractedData.led_state = currentData.led.state;
+              extractedData.brightness = currentData.led.brightness || 100;
+            }
+            if (currentData.gps?.latitude !== undefined && currentData.gps?.longitude !== undefined) {
+              extractedData.latitude = currentData.gps.latitude;
+              extractedData.longitude = currentData.gps.longitude;
+              extractedData.altitude = currentData.gps.altitude;
+              extractedData.accuracy = currentData.gps.accuracy;
+            }
+            
+            extractedData.timestamp = deviceResponse.data.updatedAt;
+            setData(extractedData);
+          }
+        }
+      } catch (err: any) {
+        console.error('Manual refresh failed:', err);
+        setError(err.message || 'Refresh failed');
+      } finally {
+        setLoading(false);
       }
     }
   };

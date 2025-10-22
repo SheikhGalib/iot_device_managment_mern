@@ -849,7 +849,7 @@ router.patch('/api-status/:deviceId', async (req, res, next) => {
 router.post('/heartbeat/:deviceKey', iotRateLimit, async (req, res, next) => {
   try {
     const { deviceKey } = req.params;
-    const { cpu_usage, ram_usage, temperature, timestamp } = req.body;
+    const { cpu_usage, ram_usage, temperature, timestamp, signal_strength, uptime } = req.body;
 
     const device = await Device.findOne({ device_key: deviceKey });
     if (!device) {
@@ -859,10 +859,19 @@ router.post('/heartbeat/:deviceKey', iotRateLimit, async (req, res, next) => {
       });
     }
 
-    // Update device metrics
-    device.cpu_usage = cpu_usage || device.cpu_usage || 0;
-    device.ram_usage = ram_usage || device.ram_usage || 0; 
-    device.temperature = temperature || device.temperature || 0;
+    // Update device metrics based on device category
+    if (device.category === 'Computer') {
+      // For edge servers/computers - keep CPU/RAM metrics
+      device.cpu_usage = cpu_usage || device.cpu_usage || 0;
+      device.ram_usage = ram_usage || device.ram_usage || 0; 
+      device.temperature = temperature || device.temperature || 0;
+    } else if (device.category === 'IoT') {
+      // For IoT devices - use different metrics
+      device.signal_strength = signal_strength || device.signal_strength || 0;
+      device.uptime = uptime || device.uptime || 0;
+      // Don't update CPU/RAM for IoT devices as they're meaningless
+    }
+
     device.last_seen = new Date();
     device.status = 'online';
     if (device.category === 'IoT') {
