@@ -44,6 +44,21 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
     );
   };
 
+  const handleSelectAll = () => {
+    const onlineDeviceIds = devices
+      .filter(device => device.status === 'online')
+      .map(device => device._id);
+    setSelectedDevices(onlineDeviceIds);
+  };
+
+  const handleSelectNone = () => {
+    setSelectedDevices([]);
+  };
+
+  const onlineDevicesCount = devices.filter(device => device.status === 'online').length;
+  const isAllSelected = onlineDevicesCount > 0 && selectedDevices.length === onlineDevicesCount;
+  const hasSelections = selectedDevices.length > 0;
+
   const handleDeploy = () => {
     if (selectedDevices.length === 0) {
       toast.error("Please select at least one device");
@@ -84,7 +99,27 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
         <div className="space-y-6">
           {/* Device Selection */}
           <div className="space-y-4">
-            <Label>Select Devices</Label>
+            <div className="flex items-center justify-between">
+              <Label>Select Devices</Label>
+              {devices.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={isAllSelected || (!isAllSelected && hasSelections) ? handleSelectNone : handleSelectAll}
+                    disabled={onlineDevicesCount === 0}
+                  >
+                    {isAllSelected 
+                      ? 'Deselect All' 
+                      : hasSelections 
+                        ? 'Clear Selection' 
+                        : `Select All Online (${onlineDevicesCount})`
+                    }
+                  </Button>
+                </div>
+              )}
+            </div>
             {devices.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <p>No edge devices found.</p>
@@ -98,14 +133,20 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
                       id={device._id}
                       checked={selectedDevices.includes(device._id)}
                       onCheckedChange={() => handleDeviceToggle(device._id)}
+                      disabled={device.status !== 'online'}
                     />
                     <label
                       htmlFor={device._id}
-                      className="text-sm cursor-pointer flex-1"
+                      className={`text-sm flex-1 ${
+                        device.status === 'online' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                      }`}
                     >
                       <div className="flex items-center gap-1">
                         <span className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
                         {device.name}
+                        {device.status !== 'online' && (
+                          <span className="text-xs text-muted-foreground ml-1">(offline)</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {device.type} • {device.ip_address || 'No IP'}
@@ -116,6 +157,14 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
                     </label>
                   </div>
                 ))}
+              </div>
+            )}
+            {devices.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                {selectedDevices.length} of {onlineDevicesCount} online devices selected
+                {devices.length - onlineDevicesCount > 0 && (
+                  <span className="ml-2">• {devices.length - onlineDevicesCount} offline devices unavailable</span>
+                )}
               </div>
             )}
           </div>
