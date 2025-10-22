@@ -129,6 +129,47 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
   
   const { toast } = useToast();
 
+  // Helper function to determine data point limits based on time range
+  const getDataPointLimit = (timeRange: string): number => {
+    switch (timeRange) {
+      case 'hour':
+        return 60; // 1 point per minute for 1 hour
+      case 'day':
+        return 96; // 1 point per 15 minutes for 1 day
+      case 'week':
+        return 168; // 1 point per hour for 1 week
+      default:
+        return 100;
+    }
+  };
+
+  // Helper function to format time based on selected time range
+  const formatTimeForRange = (date: Date, timeRange: string): string => {
+    switch (timeRange) {
+      case 'hour':
+        return date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+      case 'day':
+        return date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+      case 'week':
+        return date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit'
+        });
+      default:
+        return date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+    }
+  };
+
   const fetchChartData = async () => {
     if (!deviceId) return;
     
@@ -145,7 +186,7 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
         params: {
           metrics: selectedMetrics.join(','),
           timeRange,
-          limit: '500'
+          limit: getDataPointLimit(timeRange).toString()
         }
       });
       
@@ -180,10 +221,6 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
       console.log(`[IoTChartWidget] Error occurred, generating demo data for testing`);
       const demoData = generateDemoData();
       setChartData(demoData);
-      setCurrentValues({
-        temperature: { value: 25.5, unit: '°C', timestamp: new Date().toISOString() },
-        humidity: { value: 58.2, unit: '%', timestamp: new Date().toISOString() }
-      });
       
       toast({
         title: "Warning",
@@ -208,23 +245,21 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
         if (!timeMap.has(timeKey)) {
           timeMap.set(timeKey, {
             timestamp: point.timestamp,
-            time: new Date(point.timestamp).toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })
+            time: formatTimeForRange(new Date(point.timestamp), timeRange)
           });
         }
         
         const entry = timeMap.get(timeKey)!;
         
-        // Handle different data types
+        // Handle different data types and round to 2 decimal places
         if (metric === 'gps' && typeof point.value === 'object') {
           entry[`${metric}_lat`] = point.value.latitude;
           entry[`${metric}_lng`] = point.value.longitude;
           // For GPS, we can chart distance from origin or accuracy
-          entry[metric] = point.metadata?.accuracy || 0;
+          entry[metric] = Math.round((point.metadata?.accuracy || 0) * 100) / 100;
         } else {
-          entry[metric] = typeof point.value === 'number' ? point.value : (point.value ? 1 : 0);
+          const numValue = typeof point.value === 'number' ? point.value : (point.value ? 1 : 0);
+          entry[metric] = Math.round(numValue * 100) / 100;
         }
       });
     });
@@ -246,10 +281,7 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
       const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000);
       const dataPoint: ChartData = {
         timestamp: timestamp.toISOString(),
-        time: timestamp.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })
+        time: formatTimeForRange(timestamp, timeRange)
       };
       
       // Generate realistic sensor data with proper ranges
@@ -296,14 +328,7 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
     return '#22c55e'; // Green
   };
 
-  const getCurrentValueColor = (metric: string): string => {
-    const currentValue = currentValues[metric];
-    if (!currentValue || typeof currentValue.value !== 'number') {
-      return METRIC_CONFIGS[metric]?.color || '#6b7280';
-    }
-    
-    return getThresholdColor(metric, currentValue.value);
-  };
+
 
   const formatTooltipValue = (value: any, name: string): [string, string] => {
     const config = METRIC_CONFIGS[name];
@@ -337,18 +362,25 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
       return (
         <div className="bg-background border rounded-lg p-3 shadow-lg">
           <p className="text-sm font-medium mb-2">{label}</p>
-          {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center gap-2">
-              <div 
-                className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-sm">
-                {entry.name}: {entry.value}
-                {METRIC_CONFIGS[entry.dataKey]?.unit}
-              </span>
-            </div>
-          ))}
+          {payload.map((entry: any, index: number) => {
+            const config = METRIC_CONFIGS[entry.dataKey];
+            const formattedValue = typeof entry.value === 'number' 
+              ? entry.value.toFixed(2) 
+              : entry.value;
+            
+            return (
+              <div key={index} className="flex items-center gap-2">
+                <div 
+                  className="w-3 h-3 rounded-full" 
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-sm">
+                  {config?.name || entry.name}: {formattedValue}
+                  {config?.unit || ''}
+                </span>
+              </div>
+            );
+          })}
         </div>
       );
     }
@@ -438,22 +470,10 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
                   >
                     <IconComponent 
                       className="h-4 w-4" 
-                      style={{ color: getCurrentValueColor(config.key) }}
+                      style={{ color: config.color }}
                     />
                     <span className="text-sm">{config.name}</span>
-                    {currentValue && (
-                      <Badge 
-                        variant="secondary" 
-                        className="text-xs"
-                        style={{ 
-                          backgroundColor: getCurrentValueColor(config.key) + '20',
-                          borderColor: getCurrentValueColor(config.key)
-                        }}
-                      >
-                        {currentValue.value}
-                        {config.unit}
-                      </Badge>
-                    )}
+
                   </Label>
                 </div>
               );
@@ -497,6 +517,12 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
                 <YAxis 
                   tick={{ fontSize: 12 }}
                   domain={['dataMin - 5', 'dataMax + 5']}
+                  tickFormatter={(value) => {
+                    if (typeof value === 'number') {
+                      return value.toFixed(1);
+                    }
+                    return value;
+                  }}
                   label={{ 
                     value: getYAxisLabel(), 
                     angle: -90, 
@@ -561,41 +587,7 @@ export const IoTChartWidget: React.FC<IoTChartWidgetProps> = ({
           )}
         </div>
 
-        {/* Current Values Summary */}
-        {Object.keys(currentValues).length > 0 && (
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <h4 className="text-sm font-medium mb-2">Current Values</h4>
-            <div className="flex flex-wrap gap-4">
-              {selectedMetrics.map(metric => {
-                const config = METRIC_CONFIGS[metric];
-                const current = currentValues[metric];
-                
-                if (!current) return null;
-                
-                const IconComponent = config.icon;
-                const valueColor = getCurrentValueColor(metric);
-                
-                return (
-                  <div key={metric} className="flex items-center gap-2">
-                    <IconComponent 
-                      className="h-4 w-4" 
-                      style={{ color: valueColor }}
-                    />
-                    <span className="text-sm">
-                      {config.name}: 
-                      <span 
-                        className="font-medium ml-1"
-                        style={{ color: valueColor }}
-                      >
-                        {current.value}{config.unit}
-                      </span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+
       </CardContent>
     </Card>
   );
