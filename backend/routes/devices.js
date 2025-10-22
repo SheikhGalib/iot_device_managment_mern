@@ -213,6 +213,68 @@ router.get('/status/:id', async (req, res, next) => {
   }
 });
 
+// @route   GET /api/devices/deployments
+// @desc    Get all deployment activities across all devices
+// @access  Private
+router.get('/deployments', authenticate, async (req, res, next) => {
+  try {
+    const { page = 1, limit = 50, status, deviceId } = req.query;
+    
+    const query = { action_type: 'deploy_code' };
+    
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    
+    if (deviceId) {
+      query.device_id = deviceId;
+    }
+
+    const deployments = await DeviceActivity.find(query)
+      .populate('device_id', 'name type ip_address mac_address')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+
+    const total = await DeviceActivity.countDocuments(query);
+
+    // Transform data for frontend compatibility
+    const transformedDeployments = deployments.map(deployment => ({
+      id: deployment._id,
+      deviceId: deployment.device_id._id,
+      deviceName: deployment.device_id.name,
+      status: deployment.status,
+      startTime: deployment.start_time,
+      endTime: deployment.end_time,
+      fileName: deployment.command?.includes('Deploy file:') 
+        ? deployment.command.replace('Deploy file: ', '') 
+        : null,
+      logs: deployment.log_output,
+      triggeredBy: deployment.triggered_by,
+      errorMessage: deployment.error_message,
+      duration: deployment.end_time 
+        ? Math.round((new Date(deployment.end_time) - new Date(deployment.start_time)) / 1000)
+        : null
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        deployments: transformedDeployments,
+        pagination: {
+          page: parseInt(page),
+          pages: Math.ceil(total / parseInt(limit)),
+          total,
+          limit: parseInt(limit)
+        }
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   GET /api/devices/:id
 // @desc    Get device by ID
 // @access  Private
@@ -1446,6 +1508,211 @@ router.get('/:id/chart-data/aggregated', authenticate, async (req, res, next) =>
         }))
       }
     });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/devices/deploy
+// @desc    Deploy code to multiple devices
+// @access  Private
+router.post('/deploy', authenticate, async (req, res, next) => {
+  try {
+    const { deviceIds, commands, fileName } = req.body;
+    const userId = req.user.username || req.user.email || 'unknown';
+
+    if (!deviceIds || !Array.isArray(deviceIds) || deviceIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Device IDs are required'
+      });
+    }
+
+    if (!commands && !fileName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Commands or file are required'
+      });
+    }
+
+    // Create deployment activities for each device
+    const deploymentPromises = deviceIds.map(async (deviceId) => {
+      try {
+        const device = await Device.findById(deviceId);
+        if (!device) {
+          throw new Error(`Device with ID ${deviceId} not found`);
+        }
+
+        if (device.status !== 'online') {
+          throw new Error(`Device ${device.name} is not online`);
+        }
+
+        // Create deployment activity record
+        const activity = await DeviceActivity.create({
+          device_id: deviceId,
+          action_type: 'deploy_code',
+          status: 'in_progress',
+          command: commands || `Deploy file: ${fileName}`,
+          triggered_by: userId,
+          log_output: `[${new Date().toISOString()}] Starting deployment to ${device.name}...\n`
+        });
+
+        // Execute deployment on actual edge server
+        setTimeout(async () => {
+          try {
+            // Get device connection details
+            const deviceUrl = `http://${device.ip_address}:8081`; // Edge server HTTP API port
+            
+            // Test connection to edge server
+            const axios = require('axios');
+            
+            activity.log_output += `[${new Date().toISOString()}] Connecting to edge server at ${deviceUrl}\n`;
+            await activity.save();
+
+            // Execute commands on edge server
+            if (commands) {
+              const commandLines = commands.split('\n').filter(cmd => cmd.trim());
+              
+              for (const command of commandLines) {
+                activity.log_output += `[${new Date().toISOString()}] Executing: ${command}\n`;
+                await activity.save();
+
+                try {
+                  const response = await axios.post(`${deviceUrl}/api/exec`, {
+                    command: command.trim()
+                  }, {
+                    timeout: 30000,
+                    headers: {
+                      'Content-Type': 'application/json'
+                    }
+                  });
+
+                  if (response.data.success) {
+                    activity.log_output += `[${new Date().toISOString()}] Command output:\n${response.data.stdout}\n`;
+                    if (response.data.stderr) {
+                      activity.log_output += `[${new Date().toISOString()}] Command stderr:\n${response.data.stderr}\n`;
+                    }
+                  } else {
+                    throw new Error(response.data.error || 'Command execution failed');
+                  }
+                } catch (cmdError) {
+                  activity.log_output += `[${new Date().toISOString()}] Command failed: ${cmdError.message}\n`;
+                  throw cmdError;
+                }
+                
+                await activity.save();
+              }
+            }
+
+            // Update activity with success
+            activity.status = 'success';
+            activity.log_output += `[${new Date().toISOString()}] Deployment completed successfully\n`;
+            activity.end_time = new Date();
+            await activity.save();
+
+          } catch (error) {
+            // Update activity with failure
+            activity.status = 'failed';
+            activity.log_output += `[${new Date().toISOString()}] Deployment failed: ${error.message}\n`;
+            activity.error_message = error.message;
+            activity.end_time = new Date();
+            await activity.save();
+          }
+        }, 2000); // Start deployment after 2 seconds
+
+        return {
+          deviceId,
+          deviceName: device.name,
+          activityId: activity._id,
+          status: 'started'
+        };
+      } catch (error) {
+        return {
+          deviceId,
+          deviceName: 'Unknown',
+          status: 'failed',
+          error: error.message
+        };
+      }
+    });
+
+    const results = await Promise.all(deploymentPromises);
+
+    res.json({
+      success: true,
+      message: `Deployment started for ${results.length} device(s)`,
+      data: {
+        deployments: results,
+        successCount: results.filter(r => r.status === 'started').length,
+        failedCount: results.filter(r => r.status === 'failed').length
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/devices/:id/edge-logs
+// @desc    Get edge server logs from the device
+// @access  Private
+router.get('/:id/edge-logs', authenticate, async (req, res, next) => {
+  try {
+    const { lines = 15 } = req.query;
+    
+    const device = await Device.findById(req.params.id);
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    if (device.status !== 'online') {
+      return res.status(400).json({
+        success: false,
+        error: 'Device is not online'
+      });
+    }
+
+    try {
+      const axios = require('axios');
+      const deviceUrl = `http://${device.ip_address}:8081`;
+      
+      // Execute tail command to get recent logs
+      const response = await axios.post(`${deviceUrl}/api/exec`, {
+        command: `tail -n ${lines} edge_server.log`
+      }, {
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        res.json({
+          success: true,
+          data: {
+            logs: response.data.stdout || 'No logs found',
+            lines: parseInt(lines),
+            device: {
+              id: device._id,
+              name: device.name,
+              ip: device.ip_address
+            }
+          }
+        });
+      } else {
+        throw new Error(response.data.error || 'Failed to retrieve logs');
+      }
+
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: `Failed to connect to edge server: ${error.message}`
+      });
+    }
 
   } catch (error) {
     next(error);

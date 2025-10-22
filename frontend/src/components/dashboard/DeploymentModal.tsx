@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Upload } from "lucide-react";
-import { Device } from "@/lib/deviceApi";
+import { Device, deviceApi } from "@/lib/deviceApi";
 import { toast } from "sonner";
 
 interface DeploymentModalProps {
@@ -59,7 +59,7 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
   const isAllSelected = onlineDevicesCount > 0 && selectedDevices.length === onlineDevicesCount;
   const hasSelections = selectedDevices.length > 0;
 
-  const handleDeploy = () => {
+  const handleDeploy = async () => {
     if (selectedDevices.length === 0) {
       toast.error("Please select at least one device");
       return;
@@ -70,19 +70,45 @@ const DeploymentModal = ({ open, onOpenChange, devices }: DeploymentModalProps) 
       return;
     }
 
-    // Get selected device names for toast message
-    const selectedDeviceNames = devices
-      .filter(device => selectedDevices.includes(device._id))
-      .map(device => device.name);
-    
-    toast.success(`Deploying to ${selectedDeviceNames.length} device(s): ${selectedDeviceNames.join(', ')}`);
-    onOpenChange(false);
-    setSelectedDevices([]);
-    setCommands("");
-    setFile(null);
-    
-    // Redirect to deployments page to track progress
-    navigate("/dashboard/deployments");
+    try {
+      // Get selected device names for toast message
+      const selectedDeviceNames = devices
+        .filter(device => selectedDevices.includes(device._id))
+        .map(device => device.name);
+      
+      toast.loading(`Starting deployment to ${selectedDeviceNames.length} device(s)...`);
+
+      // Call the deployment API
+      const response = await deviceApi.deployCode(
+        selectedDevices,
+        commands.trim() || undefined,
+        file?.name
+      );
+
+      if (response.data.success) {
+        toast.success(
+          `Deployment started for ${response.data.data.successCount} device(s): ${selectedDeviceNames.join(', ')}`
+        );
+        
+        if (response.data.data.failedCount > 0) {
+          toast.warning(`${response.data.data.failedCount} device(s) failed to start deployment`);
+        }
+      } else {
+        throw new Error(response.data.error || 'Deployment failed');
+      }
+
+      onOpenChange(false);
+      setSelectedDevices([]);
+      setCommands("");
+      setFile(null);
+      
+      // Redirect to deployments page to track progress
+      navigate("/dashboard/deployments");
+      
+    } catch (error: any) {
+      console.error('Deployment error:', error);
+      toast.error(error.message || 'Failed to start deployment');
+    }
   };
 
   return (

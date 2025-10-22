@@ -115,10 +115,24 @@ const DeviceCard = ({ device }: DeviceCardProps) => {
         </div>
       </div>
 
-      <Button variant="outline" className="w-full mt-4">
-        View Details
-        <ChevronRight className="ml-2 h-4 w-4" />
-      </Button>
+      <div className="flex gap-2 mt-4">
+        <Button variant="outline" className="flex-1">
+          View Details
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => {
+            // TODO: Open logs modal
+            console.log('View logs for device:', device._id);
+          }}
+          disabled={device.status !== 'online'}
+          title={device.status !== 'online' ? 'Device must be online to view logs' : 'View edge server logs'}
+        >
+          Logs
+        </Button>
+      </div>
     </Card>
   );
 };

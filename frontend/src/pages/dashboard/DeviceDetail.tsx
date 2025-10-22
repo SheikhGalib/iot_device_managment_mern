@@ -165,9 +165,9 @@ const DeviceDetail = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-2">Device Not Found</h2>
           <p className="text-muted-foreground mb-4">The device you're looking for doesn't exist.</p>
-          <Button onClick={() => navigate("/dashboard")}>
+          <Button onClick={() => navigate("/dashboard/edge-devices")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
+            Back to Edge Devices
           </Button>
         </div>
       </div>

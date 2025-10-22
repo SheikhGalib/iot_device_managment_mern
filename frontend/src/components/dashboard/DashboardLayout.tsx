@@ -39,7 +39,7 @@ const DashboardLayout = () => {
   };
 
   const navItems = [
-    { icon: Server, label: "Edge Devices", path: "/dashboard" },
+    { icon: Server, label: "Edge Devices", path: "/dashboard/edge-devices" },
     { icon: Radio, label: "IoT Devices", path: "/dashboard/iot-devices" },
     { icon: Layout, label: "IoT Workspaces", path: "/dashboard/workspaces" },
     { icon: Package, label: "Deployments", path: "/dashboard/deployments" },
@@ -78,7 +78,6 @@ const DashboardLayout = () => {
             <NavLink
               key={item.path}
               to={item.path}
-              end={item.path === "/dashboard"}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",

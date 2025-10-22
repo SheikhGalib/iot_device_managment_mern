@@ -154,4 +154,32 @@ export const deviceApi = {
     const response = await api.get(`/devices/${deviceId}/code-template/${apiType}`);
     return response;
   },
+
+  // Deploy code to devices
+  deployCode: async (deviceIds: string[], commands?: string, fileName?: string) => {
+    const response = await api.post('/devices/deploy', {
+      deviceIds,
+      commands,
+      fileName
+    });
+    return response;
+  },
+
+  // Get all deployments
+  getDeployments: async (page = 1, limit = 50, status?: string, deviceId?: string) => {
+    const params: any = { page, limit };
+    if (status) params.status = status;
+    if (deviceId) params.deviceId = deviceId;
+    
+    const response = await api.get('/devices/deployments', { params });
+    return response;
+  },
+
+  // Get edge server logs
+  getEdgeLogs: async (deviceId: string, lines = 15) => {
+    const response = await api.get(`/devices/${deviceId}/edge-logs`, { 
+      params: { lines } 
+    });
+    return response;
+  },
 };
