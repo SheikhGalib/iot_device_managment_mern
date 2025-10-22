@@ -1,6 +1,7 @@
 const express = require('express');
 const Device = require('../models/Device');
 const DeviceActivity = require('../models/DeviceActivity');
+const SensorData = require('../models/SensorData');
 const { authenticate } = require('../middleware/auth');
 const { validateDevice, validateDeviceUpdate, validateCommand } = require('../middleware/validation');
 const { sshRateLimit, iotRateLimit } = require('../middleware/rateLimiter');
@@ -972,6 +973,22 @@ router.post('/:deviceKey/temperature-control', iotRateLimit, async (req, res, ne
 
     await device.save();
 
+    // Store historical data
+    try {
+      await SensorData.create({
+        device_id: device._id,
+        device_key: deviceKey,
+        metric_type: 'temperature',
+        value: parseFloat(temperature),
+        unit: unit || 'Celsius',
+        metadata: {
+          device_name: device.name
+        }
+      });
+    } catch (histError) {
+      logger.warn(`Failed to store temperature history for device ${device.name}:`, histError);
+    }
+
     logger.info(`Temperature data received from device ${device.name}: ${temperature}${unit || '°C'}`);
 
     res.json({
@@ -1018,6 +1035,22 @@ router.post('/:deviceKey/humidity-control', iotRateLimit, async (req, res, next)
 
     await device.save();
 
+    // Store historical data
+    try {
+      await SensorData.create({
+        device_id: device._id,
+        device_key: deviceKey,
+        metric_type: 'humidity',
+        value: parseFloat(humidity),
+        unit: unit || '%',
+        metadata: {
+          device_name: device.name
+        }
+      });
+    } catch (histError) {
+      logger.warn(`Failed to store humidity history for device ${device.name}:`, histError);
+    }
+
     logger.info(`Humidity data received from device ${device.name}: ${humidity}${unit || '%'}`);
 
     res.json({
@@ -1063,6 +1096,24 @@ router.post('/:deviceKey/led-control', iotRateLimit, async (req, res, next) => {
     device.last_seen = new Date();
 
     await device.save();
+
+    // Store historical data
+    try {
+      await SensorData.create({
+        device_id: device._id,
+        device_key: deviceKey,
+        metric_type: 'led',
+        value: led_state ? 1 : 0, // Store as numeric for easier charting
+        unit: 'boolean',
+        metadata: {
+          device_name: device.name,
+          brightness: brightness || 100,
+          state: led_state
+        }
+      });
+    } catch (histError) {
+      logger.warn(`Failed to store LED history for device ${device.name}:`, histError);
+    }
 
     logger.info(`LED data received from device ${device.name}: state=${led_state}, brightness=${brightness || 100}`);
 
@@ -1111,6 +1162,27 @@ router.post('/:deviceKey/gps-control', iotRateLimit, async (req, res, next) => {
     device.last_seen = new Date();
 
     await device.save();
+
+    // Store historical data
+    try {
+      await SensorData.create({
+        device_id: device._id,
+        device_key: deviceKey,
+        metric_type: 'gps',
+        value: {
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude)
+        },
+        unit: 'coordinates',
+        metadata: {
+          device_name: device.name,
+          altitude: altitude ? parseFloat(altitude) : null,
+          accuracy: accuracy ? parseFloat(accuracy) : null
+        }
+      });
+    } catch (histError) {
+      logger.warn(`Failed to store GPS history for device ${device.name}:`, histError);
+    }
 
     logger.info(`GPS data received from device ${device.name}: ${latitude}, ${longitude}`);
 
@@ -1190,6 +1262,191 @@ router.get('/:id/supported-apis', async (req, res, next) => {
         }))
       }
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/devices/:id/chart-data
+// @desc    Get historical sensor data for charts
+// @access  Private
+router.get('/:id/chart-data', authenticate, async (req, res, next) => {
+  try {
+    const device = await Device.findById(req.params.id);
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    const { 
+      metrics = ['temperature'], // Default to temperature
+      timeRange = 'day', // day, week, month
+      startDate,
+      endDate,
+      interval = 'hour', // hour, day, week, month
+      limit = 1000
+    } = req.query;
+
+    // Parse metrics (can be comma-separated)
+    const metricTypes = Array.isArray(metrics) ? metrics : metrics.split(',');
+    
+    // Calculate date range
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else {
+      end = new Date();
+      switch (timeRange) {
+        case 'hour':
+          start = new Date(end.getTime() - 60 * 60 * 1000); // 1 hour ago
+          break;
+        case 'day':
+          start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // 1 day ago
+          break;
+        case 'week':
+          start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000); // 1 week ago
+          break;
+        case 'month':
+          start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000); // 1 month ago
+          break;
+        default:
+          start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // Default 1 day
+      }
+    }
+
+    // Get historical data
+    const historicalData = await SensorData.getHistoricalData(
+      device._id, 
+      metricTypes, 
+      start, 
+      end, 
+      parseInt(limit)
+    );
+
+    // Group data by metric type for easy charting
+    const groupedData = {};
+    metricTypes.forEach(metric => {
+      groupedData[metric] = historicalData
+        .filter(record => record.metric_type === metric)
+        .map(record => ({
+          timestamp: record.timestamp,
+          value: record.value,
+          unit: record.unit,
+          metadata: record.metadata
+        }))
+        .reverse(); // Chronological order
+    });
+
+    // Get latest values for current status
+    const latestValues = await SensorData.getLatestValues(device._id, metricTypes);
+    const currentValues = {};
+    latestValues.forEach(record => {
+      currentValues[record.metric_type] = {
+        value: record.value,
+        unit: record.unit,
+        timestamp: record.timestamp
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        device: {
+          id: device._id,
+          name: device.name,
+          status: device.status
+        },
+        timeRange: {
+          start,
+          end,
+          interval
+        },
+        metrics: metricTypes,
+        historicalData: groupedData,
+        currentValues,
+        totalDataPoints: historicalData.length
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/devices/:id/chart-data/aggregated
+// @desc    Get aggregated sensor data for charts (averages, min/max by time intervals)
+// @access  Private
+router.get('/:id/chart-data/aggregated', authenticate, async (req, res, next) => {
+  try {
+    const device = await Device.findById(req.params.id);
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found'
+      });
+    }
+
+    const { 
+      metric = 'temperature',
+      timeRange = 'day',
+      interval = 'hour',
+      startDate,
+      endDate
+    } = req.query;
+
+    // Calculate date range
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else {
+      end = new Date();
+      switch (timeRange) {
+        case 'day':
+          start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case 'week':
+          start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+      }
+    }
+
+    const aggregatedData = await SensorData.getAggregatedData(
+      device._id, 
+      metric, 
+      start, 
+      end, 
+      interval
+    );
+
+    res.json({
+      success: true,
+      data: {
+        device: {
+          id: device._id,
+          name: device.name
+        },
+        metric,
+        timeRange: { start, end, interval },
+        aggregatedData: aggregatedData.map(item => ({
+          timestamp: item.firstTimestamp,
+          avgValue: item.avgValue,
+          minValue: item.minValue,
+          maxValue: item.maxValue,
+          count: item.count,
+          period: item._id
+        }))
+      }
+    });
+
   } catch (error) {
     next(error);
   }

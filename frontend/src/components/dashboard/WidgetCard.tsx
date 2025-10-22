@@ -32,6 +32,7 @@ import {
 } from '../ui/dropdown-menu';
 import { type Widget } from '../../lib/workspaceApi';
 import { useDeviceData } from '../../hooks/useDeviceData';
+import IoTChartWidget from './IoTChartWidget';
 
 interface WidgetCardProps {
   widget: Widget;
@@ -108,15 +109,37 @@ const getStatusColor = (widget: Widget, value: any) => {
     return value ? 'text-green-500' : 'text-red-500';
   }
   
-  if (format === 'number' && thresholds) {
+  // Default thresholds based on widget type
+  const getDefaultThresholds = (type: string) => {
+    switch (type) {
+      case 'temperature':
+        return { warning: 35, critical: 40 };
+      case 'humidity':
+        return { warning: 50, critical: 60 };
+      default:
+        return {};
+    }
+  };
+  
+  const effectiveThresholds = thresholds || getDefaultThresholds(widget.type);
+  
+  if (format === 'number' || widget.type === 'temperature' || widget.type === 'humidity') {
     const num = typeof value === 'number' ? value : parseFloat(value);
     if (!isNaN(num)) {
-      if (thresholds.critical !== undefined && num >= thresholds.critical) {
+      console.log(`[WidgetCard] Status color check for ${widget.type}:`, {
+        value: num,
+        thresholds: effectiveThresholds
+      });
+      
+      if (effectiveThresholds.critical !== undefined && num >= effectiveThresholds.critical) {
+        console.log(`[WidgetCard] Status: CRITICAL (red)`);
         return 'text-red-500';
       }
-      if (thresholds.warning !== undefined && num >= thresholds.warning) {
+      if (effectiveThresholds.warning !== undefined && num >= effectiveThresholds.warning) {
+        console.log(`[WidgetCard] Status: WARNING (yellow)`);
         return 'text-yellow-500';
       }
+      console.log(`[WidgetCard] Status: NORMAL (green)`);
       return 'text-green-500';
     }
   }
@@ -149,7 +172,7 @@ const getStatusIcon = (widget: Widget, value: any) => {
   return null;
 };
 
-const renderWidgetContent = (widget: Widget, currentValue: any) => {
+const renderWidgetContent = (widget: Widget, currentValue: any, device: any, isConnected: boolean) => {
   const IconComponent = getWidgetIcon(widget.type);
   const StatusIcon = getStatusIcon(widget, currentValue);
   const statusColor = getStatusColor(widget, currentValue);
@@ -159,12 +182,53 @@ const renderWidgetContent = (widget: Widget, currentValue: any) => {
     case 'temperature':
     case 'humidity':
     case 'gauge':
+      // Get threshold-based color for icon
+      const getThresholdIconColor = () => {
+        if (currentValue === null || currentValue === undefined) {
+          return widget.settings.color || getWidgetColor(widget.type);
+        }
+        
+        const num = typeof currentValue === 'number' ? currentValue : parseFloat(currentValue);
+        if (isNaN(num)) return widget.settings.color || getWidgetColor(widget.type);
+        
+        const getDefaultThresholds = (type: string) => {
+          switch (type) {
+            case 'temperature':
+              return { warning: 40, critical: 45 };
+            case 'humidity':
+              return { warning: 60, critical: 75 };
+            default:
+              return {};
+          }
+        };
+        
+        const effectiveThresholds = widget.settings.thresholds || getDefaultThresholds(widget.type);
+        
+        console.log(`[WidgetCard] Threshold check for ${widget.type}:`, {
+          value: num,
+          thresholds: effectiveThresholds,
+          critical: effectiveThresholds.critical,
+          warning: effectiveThresholds.warning
+        });
+        
+        if (effectiveThresholds.critical !== undefined && num >= effectiveThresholds.critical) {
+          console.log(`[WidgetCard] ${widget.type} is CRITICAL (${num} >= ${effectiveThresholds.critical})`);
+          return '#ef4444'; // Red
+        }
+        if (effectiveThresholds.warning !== undefined && num >= effectiveThresholds.warning) {
+          console.log(`[WidgetCard] ${widget.type} is WARNING (${num} >= ${effectiveThresholds.warning})`);
+          return '#f59e0b'; // Yellow
+        }
+        console.log(`[WidgetCard] ${widget.type} is NORMAL (${num} < ${effectiveThresholds.warning || 'no warning threshold'})`);
+        return '#22c55e'; // Green
+      };
+      
       return (
         <div className="flex flex-col items-center justify-center h-full space-y-2">
           <div className="flex items-center space-x-2">
             <IconComponent 
               className="h-8 w-8" 
-              style={{ color: widget.settings.color || getWidgetColor(widget.type) }}
+              style={{ color: getThresholdIconColor() }}
             />
             {StatusIcon && <StatusIcon className={`h-4 w-4 ${statusColor}`} />}
           </div>
@@ -174,6 +238,29 @@ const renderWidgetContent = (widget: Widget, currentValue: any) => {
           {widget.settings.sensorKey && (
             <div className="text-xs text-muted-foreground">
               {widget.settings.sensorKey}
+            </div>
+          )}
+          {/* Threshold indicator */}
+          {currentValue !== null && (widget.type === 'temperature' || widget.type === 'humidity') && (
+            <div className="flex items-center gap-1 text-xs">
+              <div 
+                className="w-2 h-2 rounded-full" 
+                style={{ backgroundColor: getThresholdIconColor() }}
+              />
+              <span className={statusColor.replace('text-', 'text-opacity-70 ')}>
+                {(() => {
+                  const num = typeof currentValue === 'number' ? currentValue : parseFloat(currentValue);
+                  const thresholds = widget.type === 'temperature' ? { warning: 35, critical: 40 } : { warning: 50, critical: 60 };
+                  
+                  if (num >= thresholds.critical) {
+                    return widget.type === 'temperature' ? 'Critical' : 'High';
+                  } else if (num >= thresholds.warning) {
+                    return widget.type === 'temperature' ? 'Warning' : 'Moderate';
+                  } else {
+                    return 'Normal';
+                  }
+                })()}
+              </span>
             </div>
           )}
         </div>
@@ -224,6 +311,19 @@ const renderWidgetContent = (widget: Widget, currentValue: any) => {
       );
       
     case 'chart':
+      if (widget.deviceId && isConnected) {
+        return (
+          <div className="h-full -m-6">
+            <IoTChartWidget
+              deviceId={String(widget.deviceId)}
+              deviceName={device?.name}
+              title={widget.title}
+              height={200}
+              className="border-0 shadow-none"
+            />
+          </div>
+        );
+      }
       return (
         <div className="flex flex-col h-full">
           <div className="flex items-center space-x-2 mb-2">
@@ -231,10 +331,9 @@ const renderWidgetContent = (widget: Widget, currentValue: any) => {
             <span className="text-sm font-medium">Chart Data</span>
           </div>
           <div className="flex-1 bg-muted rounded flex items-center justify-center">
-            <div className="text-xs text-muted-foreground">Chart visualization</div>
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            Last: {formattedValue}
+            <div className="text-xs text-muted-foreground">
+              {widget.deviceId ? 'Device Offline' : 'No Device Linked'}
+            </div>
           </div>
         </div>
       );
@@ -302,6 +401,12 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
   const getCurrentValue = () => {
     if (!widget.deviceId || !deviceData) {
       console.log(`[WidgetCard] No device data for widget ${widget.title} (type: ${widget.type}, deviceId: ${widget.deviceId}, dataPath: ${widget.dataPath})`);
+      if (error) {
+        console.log(`[WidgetCard] Error details:`, error);
+      }
+      if (loading) {
+        console.log(`[WidgetCard] Still loading data...`);
+      }
       return placeholderValue; // Use placeholder data if no device linked or no real data
     }
 
@@ -424,7 +529,7 @@ export function WidgetCard({ widget, onEdit, onDuplicate, onDelete, onLinkDevice
             <div className="text-xs text-center">Device Error</div>
           </div>
         ) : (
-          renderWidgetContent(widget, currentValue)
+          renderWidgetContent(widget, currentValue, device, isConnected)
         )}
       </CardContent>
       

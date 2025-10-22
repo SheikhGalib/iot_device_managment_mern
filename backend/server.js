@@ -50,6 +50,15 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Test endpoint for debugging
+app.get('/api/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API routes are working',
+    timestamp: new Date()
+  });
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/devices', require('./routes/devices'));
